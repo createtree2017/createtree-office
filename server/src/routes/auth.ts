@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_dev_only";
@@ -89,6 +90,21 @@ router.post("/login", async (req, res) => {
         });
     } catch (error: any) {
         res.status(500).json({ success: false, message: "서버 오류가 발생했습니다.", error: error.message });
+    }
+});
+
+// 승인된 모든 사용자 목록 조회 (업무 할당용 - 경량 데이터)
+router.get("/users", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const approvedUsers = await db.select({
+            id: users.id,
+            name: users.name,
+            role: users.role,
+        }).from(users).where(eq(users.isApproved, true));
+
+        res.json({ success: true, data: approvedUsers });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: "사용자 목록을 불러오지 못했습니다." });
     }
 });
 

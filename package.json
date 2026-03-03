@@ -7,7 +7,10 @@
         "server:dev": "npm run dev --prefix server",
         "client:dev": "npm run dev --prefix client",
         "db:push": "npm run db:push --prefix server",
-        "db:generate": "npm run db:generate --prefix server"
+        "db:generate": "npm run db:generate --prefix server",
+        "build": "npm run build --prefix client && npm run build --prefix server",
+        "start": "npm run start --prefix server",
+        "postinstall": "npm install --prefix client && npm install --prefix server"
     },
     "dependencies": {
         "concurrently": "^8.2.2"

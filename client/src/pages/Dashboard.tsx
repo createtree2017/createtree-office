@@ -5,31 +5,14 @@ const Dashboard = () => {
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-    };
-
     return (
-        <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 font-sans">
-            <div className="absolute top-4 right-4 flex items-center gap-4">
-                <span className="text-slate-400 text-sm">{user?.name} ({user?.role})</span>
-                <button
-                    onClick={handleLogout}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded text-sm transition-colors cursor-pointer"
-                >
-                    Logout
-                </button>
+        <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
+            <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-1000">
+                <h1 className="text-5xl font-black mb-4 tracking-tight bg-gradient-to-r from-blue-400 via-emerald-400 to-blue-400 bg-clip-text text-transparent">
+                    createTree Office
+                </h1>
+                <p className="text-slate-400 text-lg font-medium">환영합니다, {user?.name || '사용자'}님. 오늘의 업무를 확인하세요.</p>
             </div>
-
-            <h1 className="text-5xl font-extrabold mb-6 bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">
-                createTree Office
-            </h1>
-            <p className="text-slate-400 text-xl mb-12 text-center max-w-2xl leading-relaxed">
-                사내 인수인계 매뉴얼 및 업무 효율화를 위한 <br />
-                프리미엄 관리자 포털에 오신 것을 환영합니다.
-            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
                 <div
@@ -40,9 +23,12 @@ const Dashboard = () => {
                     <p className="text-slate-400">인수인계 매뉴얼 작성 및 조회 (인플레이스 편집 지원)</p>
                 </div>
 
-                <div className="p-8 bg-slate-900/50 rounded-2xl border border-slate-800 backdrop-blur-sm shadow-xl hover:border-emerald-500/50 transition-all cursor-pointer group">
+                <div
+                    onClick={() => navigate('/tasks')}
+                    className="p-8 bg-slate-900/50 rounded-2xl border border-slate-800 backdrop-blur-sm shadow-xl hover:border-emerald-500/50 transition-all cursor-pointer group"
+                >
                     <h2 className="text-2xl font-bold mb-4 text-emerald-400 group-hover:text-emerald-300">Tasks</h2>
-                    <p className="text-slate-400">업무 할 일 및 캘린더 관리 (준비 중)</p>
+                    <p className="text-slate-400">업무 할 일 및 캘린더 관리 (담당자 할당 지원)</p>
                 </div>
 
                 {user?.role === 'ADMIN' && (
@@ -57,7 +43,7 @@ const Dashboard = () => {
             </div>
 
             <footer className="mt-16 text-slate-500 text-sm italic">
-                Authorized Access Only.
+                "업무의 가치를 만드는 공간, createTree Office"
             </footer>
         </div>
     );
