@@ -96,4 +96,28 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
     }
 });
 
+// 업무 삭제
+router.delete("/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+
+        const [task] = await db.select().from(tasks).where(eq(tasks.id, parseInt(id)));
+        if (!task) {
+            return res.status(404).json({ success: false, message: "업무를 찾을 수 없습니다." });
+        }
+
+        // 작성자 또는 ADMIN만 삭제 가능
+        if (task.authorId !== userId && req.user?.role !== 'ADMIN') {
+            return res.status(403).json({ success: false, message: "삭제 권한이 없습니다. 작성자나 관리자만 삭제할 수 있습니다." });
+        }
+
+        await db.delete(tasks).where(eq(tasks.id, parseInt(id)));
+
+        res.json({ success: true, message: "업무가 성공적으로 삭제되었습니다." });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: "업무 삭제 중 오류가 발생했습니다." });
+    }
+});
+
 export default router;

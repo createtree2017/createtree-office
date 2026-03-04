@@ -1,26 +1,26 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { manuals } from "../db/schema.js";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc, sql } from "drizzle-orm";
 import { authenticateToken } from "../middleware/auth.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 
-// 모든 승인된 사용자는 매뉴얼 목록 조회 가능
+// 모든 승인된 사용자는 매뉴얼 목록 조회 가능 (정렬 순서 적용)
 router.get("/", authenticateToken, async (req, res) => {
     try {
-        const list = await db.select().from(manuals).orderBy(desc(manuals.updatedAt));
+        const list = await db.select().from(manuals).orderBy(asc(manuals.order), desc(manuals.updatedAt));
         res.json({ success: true, data: list });
     } catch (error: any) {
-        res.status(500).json({ success: true, message: "목록 조회 중 오류가 발생했습니다." });
+        res.status(500).json({ success: false, message: "목록 조회 중 오류가 발생했습니다.", error: error.message });
     }
 });
 
 // 매뉴얼 생성 (Manager 이상)
 router.post("/", authenticateToken, async (req: AuthRequest, res) => {
     try {
-        const { title, content, minRoleToEdit } = req.body;
+        const { title, content, minRoleToEdit, parentId, type, icon, order } = req.body;
         const userRole = req.user?.role || "USER";
 
         if (userRole === "USER") {
@@ -32,6 +32,10 @@ router.post("/", authenticateToken, async (req: AuthRequest, res) => {
             content,
             minRoleToEdit: minRoleToEdit || "MANAGER",
             authorId: req.user?.id as any,
+            parentId: parentId || null,
+            type: type || "PAGE",
+            icon: icon || null,
+            order: order || 0,
         }).returning();
 
         res.status(201).json({ success: true, data: newManual });
@@ -60,7 +64,7 @@ router.get("/:id", authenticateToken, async (req: AuthRequest, res) => {
 router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
     try {
         const { id } = req.params;
-        const { title, content } = req.body;
+        const { title, content, parentId, type, icon, order } = req.body;
         const userRole = req.user?.role || "USER";
 
         const [manual] = await db.select().from(manuals).where(eq(manuals.id, parseInt(id)));
@@ -81,6 +85,10 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
             .set({
                 title: title ?? manual.title,
                 content: content ?? manual.content,
+                parentId: parentId !== undefined ? parentId : manual.parentId,
+                type: type ?? manual.type,
+                icon: icon ?? manual.icon,
+                order: order ?? manual.order,
                 updatedAt: new Date()
             })
             .where(eq(manuals.id, parseInt(id)))
@@ -89,6 +97,38 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
         res.json({ success: true, data: updated });
     } catch (error: any) {
         res.status(500).json({ success: false, message: "저장 중 오류가 발생했습니다." });
+    }
+});
+
+// 매뉴얼/폴더 삭제 (ADMIN 또는 MANAGER만 가능)
+router.delete("/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const { id } = req.params;
+        const userRole = req.user?.role || "USER";
+
+        if (userRole === "USER") {
+            return res.status(403).json({ success: false, message: "삭제 권한이 없습니다." });
+        }
+
+        const [manual] = await db.select().from(manuals).where(eq(manuals.id, parseInt(id)));
+        if (!manual) {
+            return res.status(404).json({ success: false, message: "매뉴얼을 찾을 수 없습니다." });
+        }
+
+        // 하위 항목이 있는 폴더는 하위 항목 먼저 삭제 (재귀)
+        const deleteWithChildren = async (nodeId: number) => {
+            const children = await db.select().from(manuals).where(eq(manuals.parentId, nodeId));
+            for (const child of children) {
+                await deleteWithChildren(child.id);
+            }
+            await db.delete(manuals).where(eq(manuals.id, nodeId));
+        };
+
+        await deleteWithChildren(parseInt(id));
+
+        res.json({ success: true, message: "삭제되었습니다." });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: "삭제 중 오류가 발생했습니다.", error: error.message });
     }
 });
 

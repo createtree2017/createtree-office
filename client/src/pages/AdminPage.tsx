@@ -58,53 +58,75 @@ const AdminPage = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white p-12">
-            <div className="max-w-6xl mx-auto">
-                <h1 className="text-3xl font-bold mb-8 text-blue-400">직원 관리 및 가입 승인</h1>
+        <div className="min-h-screen bg-[hsl(var(--background))] text-slate-900 p-8 md:p-12 lg:p-16">
+            <div className="max-w-7xl mx-auto">
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+                    <div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-600 text-xs font-bold uppercase tracking-wider mb-4 shadow-sm">
+                            System Administration
+                        </div>
+                        <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">User Management</h1>
+                        <p className="text-slate-500 mt-3 font-medium text-lg">직원 가입 승인 및 권한 등급을 중앙 관리합니다.</p>
+                    </div>
+                </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 text-sm">
-                                <th className="px-6 py-4">이름</th>
-                                <th className="px-6 py-4">이메일</th>
-                                <th className="px-6 py-4">등급</th>
-                                <th className="px-6 py-4">승인 상태</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                            {loading ? (
-                                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500 animate-pulse">로딩 중...</td></tr>
-                            ) : users.map(u => (
-                                <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-6 py-4 font-medium">{u.name}</td>
-                                    <td className="px-6 py-4 text-slate-400">{u.email}</td>
-                                    <td className="px-6 py-4">
-                                        <select
-                                            value={u.role}
-                                            onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                                            className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        >
-                                            <option value="USER">직원</option>
-                                            <option value="MANAGER">관리자</option>
-                                            <option value="ADMIN">최고관리자</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <button
-                                            onClick={() => updateUser(u.id, { isApproved: !u.isApproved })}
-                                            className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${u.isApproved
-                                                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                                    : 'bg-amber-500/10 text-amber-500 border border-amber-500/20 cursor-pointer hover:bg-amber-500/20'
-                                                }`}
-                                        >
-                                            {u.isApproved ? '승인됨' : '승인 대기'}
-                                        </button>
-                                    </td>
+                <div className="bento-card bg-white border border-slate-200 overflow-hidden shadow-xl shadow-slate-100/50">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 text-[11px] font-bold uppercase tracking-[0.15em]">
+                                    <th className="px-8 py-5">General Info</th>
+                                    <th className="px-8 py-5 text-center">Contact</th>
+                                    <th className="px-8 py-5 text-center">Permission Role</th>
+                                    <th className="px-8 py-5 text-right">Status</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {loading ? (
+                                    <tr><td colSpan={4} className="px-8 py-24 text-center">
+                                        <div className="flex flex-col items-center gap-4 text-slate-300 font-bold tracking-tighter animate-pulse">
+                                            <div className="w-10 h-10 border-4 border-slate-100 border-t-slate-300 rounded-full animate-spin"></div>
+                                            FETCHING ACCOUNTS...
+                                        </div>
+                                    </td></tr>
+                                ) : users.map(u => (
+                                    <tr key={u.id} className="hover:bg-slate-50/50 transition-all duration-200 group">
+                                        <td className="px-8 py-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-bold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                    {u.name.charAt(0)}
+                                                </div>
+                                                <span className="font-bold text-slate-900 text-[15px]">{u.name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-6 text-center text-slate-500 font-medium text-sm italic">{u.email}</td>
+                                        <td className="px-8 py-6 text-center">
+                                            <select
+                                                value={u.role}
+                                                onChange={(e) => updateUser(u.id, { role: e.target.value })}
+                                                className="bg-slate-100 border-transparent rounded-xl px-4 py-2.5 text-[13px] font-bold text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 transition-all cursor-pointer appearance-none shadow-sm"
+                                            >
+                                                <option value="USER">Standard User</option>
+                                                <option value="MANAGER">Manager</option>
+                                                <option value="ADMIN">System Admin</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-8 py-6 text-right">
+                                            <button
+                                                onClick={() => updateUser(u.id, { isApproved: !u.isApproved })}
+                                                className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-sm ${u.isApproved
+                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-emerald-100/50'
+                                                    : 'bg-rose-50 text-rose-500 border border-rose-100 cursor-pointer hover:bg-rose-500 hover:text-white hover:shadow-rose-100 shadow-xl scale-105'
+                                                    }`}
+                                            >
+                                                {u.isApproved ? 'Approved' : 'Pending Request'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

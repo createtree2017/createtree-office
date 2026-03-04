@@ -19,9 +19,13 @@ export const manuals = pgTable("manuals", {
     title: text("title").notNull(),
     content: text("content").notNull(),
     categoryId: text("category_id"),
-    authorId: serial("author_id").references(() => users.id),
+    parentId: integer("parent_id"), // 자기 참조를 위해 references(() => manuals.id)는 타입 문제로 생략하거나 수동 관리
+    type: text("type").default("PAGE").notNull(), // PAGE | FOLDER
+    icon: text("icon"),
+    order: integer("order").default(0).notNull(),
+    authorId: integer("author_id").references(() => users.id),
     minRoleToEdit: userRoleEnum("min_role_to_edit").default("MANAGER").notNull(),
-    version: serial("version").default(1).notNull(),
+    version: integer("version").default(1).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

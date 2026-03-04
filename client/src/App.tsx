@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -7,7 +7,17 @@ import Dashboard from './pages/Dashboard';
 import ManualsPage from './pages/ManualsPage';
 import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
+import MyPage from './pages/MyPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import NavBar from './components/NavBar';
+
+// NavBar를 포함한 레이아웃 래퍼
+const AppLayout = () => (
+    <>
+        <NavBar />
+        <Outlet />
+    </>
+);
 
 function App() {
     return (
@@ -17,13 +27,16 @@ function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
 
-                {/* Protected Routes */}
+                {/* Protected Routes - NavBar 포함 레이아웃 */}
                 <Route element={<ProtectedRoute />}>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/manuals" element={<ManualsPage />} />
-                    <Route path="/manuals/:id" element={<ManualsPage />} />
-                    <Route path="/admin" element={<AdminPage />} />
-                    <Route path="/tasks" element={<TasksPage />} />
+                    <Route element={<AppLayout />}>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/manuals" element={<ManualsPage />} />
+                        <Route path="/manuals/:id" element={<ManualsPage />} />
+                        <Route path="/tasks" element={<TasksPage />} />
+                        <Route path="/admin" element={<AdminPage />} />
+                        <Route path="/mypage" element={<MyPage />} />
+                    </Route>
                 </Route>
 
                 {/* Fallback */}

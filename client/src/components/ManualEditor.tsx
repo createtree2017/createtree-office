@@ -1,8 +1,18 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { useEffect, useState } from 'react';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Highlight from '@tiptap/extension-highlight';
+import Typography from '@tiptap/extension-typography';
+import Underline from '@tiptap/extension-underline';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import {
+    Bold, Italic, List, ListOrdered, CheckSquare,
+    Type, Highlighter, Underline as UnderlineIcon,
+    Code, Quote
+} from 'lucide-react';
 
 interface ManualEditorProps {
     initialContent: string;
@@ -12,18 +22,52 @@ interface ManualEditorProps {
 
 const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) => {
     const [isSaving, setIsSaving] = useState(false);
+    const [showToolbar, setShowToolbar] = useState(false);
+    const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
+    const toolbarRef = useRef<HTMLDivElement>(null);
 
     const editor = useEditor({
         extensions: [
             StarterKit,
             Placeholder.configure({
-                placeholder: '내용을 입력하세요...',
+                placeholder: '내용을 입력하려면 텍스트를 입력하세요...',
             }),
+            TaskList,
+            TaskItem.configure({
+                nested: true,
+            }),
+            Highlight,
+            Typography,
+            Underline,
         ],
         content: initialContent,
         editable: editable,
+        onSelectionUpdate: ({ editor }) => {
+            if (!editable) return;
+            const { from, to } = editor.state.selection;
+            if (from === to) {
+                setShowToolbar(false);
+                return;
+            }
+            // Calculate position for inline toolbar
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                const editorEl = document.querySelector('.tiptap-editor-wrap');
+                if (editorEl) {
+                    const editorRect = editorEl.getBoundingClientRect();
+                    setToolbarPos({
+                        top: rect.top - editorRect.top - 48,
+                        left: rect.left - editorRect.left + rect.width / 2,
+                    });
+                    setShowToolbar(true);
+                }
+            }
+        },
         onBlur: async ({ editor }) => {
             if (!editable) return;
+            setShowToolbar(false);
 
             const html = editor.getHTML();
             if (html === initialContent) return;
@@ -49,14 +93,57 @@ const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) =
     if (!editor) return null;
 
     return (
-        <div className="relative group">
+        <div className="relative group min-h-[400px] tiptap-editor-wrap">
             {isSaving && (
-                <div className="absolute top-0 right-0 p-2 text-xs text-blue-400 animate-pulse">
+                <div className="absolute top-0 right-0 p-2 text-xs text-blue-400 animate-pulse z-10">
                     Saving...
                 </div>
             )}
-            <div className={`prose prose-invert max-w-none min-h-[200px] p-4 rounded-xl transition-all ${editable ? 'cursor-text hover:bg-slate-900/50' : 'cursor-default'
-                }`}>
+
+            {/* Inline Bubble-style Toolbar */}
+            {showToolbar && editable && (
+                <div
+                    ref={toolbarRef}
+                    className="absolute z-50 flex bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden divide-x divide-slate-700"
+                    style={{
+                        top: `${toolbarPos.top}px`,
+                        left: `${toolbarPos.left}px`,
+                        transform: 'translateX(-50%)',
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                >
+                    <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('bold') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><Bold size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('italic') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><Italic size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('underline') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><UnderlineIcon size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleHighlight().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('highlight') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><Highlighter size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('heading', { level: 2 }) ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><Type size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('bulletList') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><List size={14} /></button>
+                    <button onClick={() => editor.chain().focus().toggleTaskList().run()} className={`p-2 hover:bg-slate-700 transition-colors ${editor.isActive('taskList') ? 'text-blue-400 bg-slate-700' : 'text-slate-300'}`}><CheckSquare size={14} /></button>
+                </div>
+            )}
+
+            {/* Fixed Toolbar for editing */}
+            {editable && (
+                <div className="flex flex-wrap gap-1 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('bold') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Bold size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('italic') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Italic size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('underline') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><UnderlineIcon size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleHighlight().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('highlight') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Highlighter size={15} /></button>
+                    <div className="w-px bg-slate-200 mx-1 self-stretch" />
+                    <button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white transition-all ${editor.isActive('heading', { level: 1 }) ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>H1</button>
+                    <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white transition-all ${editor.isActive('heading', { level: 2 }) ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>H2</button>
+                    <button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white transition-all ${editor.isActive('heading', { level: 3 }) ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>H3</button>
+                    <div className="w-px bg-slate-200 mx-1 self-stretch" />
+                    <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('bulletList') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><List size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('orderedList') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><ListOrdered size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleTaskList().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('taskList') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><CheckSquare size={15} /></button>
+                    <div className="w-px bg-slate-200 mx-1 self-stretch" />
+                    <button onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('codeBlock') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Code size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleBlockquote().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('blockquote') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Quote size={15} /></button>
+                </div>
+            )}
+
+            <div className={`prose prose-slate max-w-none min-h-[300px] p-8 rounded-2xl bg-white border border-slate-100 transition-all ${editable ? 'cursor-text focus-within:border-blue-200 focus-within:ring-4 focus-within:ring-blue-50' : 'cursor-default'}`}>
                 <EditorContent editor={editor} />
             </div>
         </div>

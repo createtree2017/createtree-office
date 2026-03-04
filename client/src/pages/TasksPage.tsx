@@ -3,6 +3,7 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { useModal } from '../contexts/ModalContext';
 import CreateTaskModal from '../components/CreateTaskModal';
+import TaskDetailModal from '../components/TaskDetailModal';
 import toast from 'react-hot-toast';
 import { Plus, CheckCircle2, Clock, PauseCircle, AlertCircle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -49,7 +50,7 @@ const TasksPage = () => {
     };
 
     const handleTaskClick = (task: Task) => {
-        openModal(<CreateTaskModal initialData={task} onSuccess={fetchTasks} />);
+        openModal(<TaskDetailModal task={task} onSuccess={fetchTasks} />);
     };
 
     const getStatusIcon = (status: string) => {
@@ -117,20 +118,20 @@ const TasksPage = () => {
         const statuses: Task['status'][] = ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED'];
         return (
             <DragDropContext onDragEnd={onDragEnd}>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     {statuses.map(status => (
-                        <div key={status} className="flex flex-col gap-4">
-                            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2 px-2">
-                                {getStatusIcon(status)}
+                        <div key={status} className="flex flex-col gap-5">
+                            <h3 className="text-[13px] font-bold text-slate-400 uppercase tracking-[0.1em] flex items-center gap-2 px-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
                                 {getStatusText(status)}
-                                <span className="ml-auto bg-slate-800 px-2 py-0.5 rounded-full text-[10px]">{tasks.filter(t => t.status === status).length}</span>
+                                <span className="ml-auto bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md text-[10px] border border-slate-200">{tasks.filter(t => t.status === status).length}</span>
                             </h3>
                             <Droppable droppableId={status}>
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`space-y-3 min-h-[300px] p-2 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-slate-800/80 ring-2 ring-emerald-500/30' : ''}`}
+                                        className={`space-y-4 min-h-[500px] p-2 rounded-2xl transition-all duration-300 ${snapshot.isDraggingOver ? 'bg-blue-50/50 ring-2 ring-blue-500/10' : ''}`}
                                     >
                                         {tasks.filter(t => t.status === status).map((task, index) => (
                                             <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
@@ -140,16 +141,29 @@ const TasksPage = () => {
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
                                                         onClick={() => handleTaskClick(task)}
-                                                        className={`bg-slate-900 border p-4 rounded-xl transition-all cursor-pointer group shadow-lg
-                                                            ${snapshot.isDragging ? 'border-emerald-500/80 shadow-2xl scale-105 z-50 bg-slate-800' : 'border-slate-800 hover:border-slate-600'}`}
+                                                        className={`bento-card p-5 group cursor-pointer 
+                                                            ${snapshot.isDragging ? 'border-blue-500 shadow-2xl scale-[1.03] z-50 bg-white ring-4 ring-blue-500/5' : 'border-slate-200'}`}
                                                         style={{ ...provided.draggableProps.style }}
                                                     >
-                                                        <h4 className="font-bold text-white group-hover:text-emerald-400 transition-colors mb-2">{task.title}</h4>
-                                                        <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed break-words">{task.description}</p>
-                                                        <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-800/50">
-                                                            <span className="text-[10px] px-2 py-0.5 bg-slate-800 rounded-md text-slate-400">{task.assigneeName}</span>
+                                                        <div className="flex items-start justify-between gap-3 mb-3">
+                                                            <h4 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">{task.title}</h4>
+                                                            <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:text-blue-500 transition-colors">
+                                                                {getStatusIcon(status)}
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-[13px] text-slate-500 line-clamp-2 mb-4 leading-relaxed break-words font-medium">{task.description}</p>
+                                                        <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-200">
+                                                                    {task.assigneeName.charAt(0)}
+                                                                </div>
+                                                                <span className="text-[11px] font-semibold text-slate-600">{task.assigneeName}</span>
+                                                            </div>
                                                             {task.dueDate && (
-                                                                <span className="text-[10px] text-slate-500">{new Date(task.dueDate).toLocaleDateString()}</span>
+                                                                <div className="flex items-center gap-1.5 text-slate-400">
+                                                                    <Clock size={12} />
+                                                                    <span className="text-[10px] font-medium">{new Date(task.dueDate).toLocaleDateString()}</span>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
@@ -205,10 +219,10 @@ const TasksPage = () => {
     };
 
     const renderCalendarView = () => (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl calendar-container">
+        <div className="bento-card p-6 md:p-10 calendar-container">
             <DragDropContext onDragEnd={onCalendarDragEnd}>
                 <Calendar
-                    className="w-full bg-transparent border-none text-white"
+                    className="w-full bg-transparent border-none"
                     tileContent={({ date }: { date: Date }) => {
                         const dayTasks = tasks.filter(t => t.dueDate && new Date(t.dueDate).toDateString() === date.toDateString());
                         return (
@@ -217,7 +231,7 @@ const TasksPage = () => {
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex flex-col gap-1 mt-1 w-full flex-grow min-h-[40px] rounded p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-emerald-500/20 ring-1 ring-emerald-500/50' : ''}`}
+                                        className={`flex flex-col gap-1.5 mt-2 w-full flex-grow min-h-[60px] rounded-xl p-1.5 transition-all duration-300 ${snapshot.isDraggingOver ? 'bg-blue-50/50 ring-2 ring-blue-500/20' : ''}`}
                                     >
                                         {dayTasks.map((t, index) => (
                                             <Draggable key={`cal_task_${t.id}`} draggableId={t.id.toString()} index={index}>
@@ -227,8 +241,8 @@ const TasksPage = () => {
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
                                                         onClick={(e) => { e.stopPropagation(); handleTaskClick(t); }}
-                                                        className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded select-none cursor-pointer truncate transition-all 
-                                                            ${snapshot.isDragging ? 'bg-emerald-500 text-white shadow-xl scale-110 z-50' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'}`}
+                                                        className={`text-[10px] font-bold px-2 py-1.5 rounded-lg select-none cursor-pointer truncate transition-all border
+                                                            ${snapshot.isDragging ? 'bg-blue-600 text-white shadow-2xl scale-110 z-50 border-blue-400' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600 hover:bg-white shadow-sm'}`}
                                                         title={t.title}
                                                     >
                                                         {t.title}
@@ -246,42 +260,50 @@ const TasksPage = () => {
             </DragDropContext>
             <style>{`
         .react-calendar { width: 100% !important; background: transparent; border: none; font-family: inherit; }
-        .react-calendar__tile { color: white; padding: 0.5em !important; height: 120px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; border: 1px solid #1e293b !important; overflow: hidden; }
-        .react-calendar__tile:enabled:hover, .react-calendar__tile:enabled:focus { background-color: #0f172a; }
-        .react-calendar__tile--now { background: #1e293b !important; }
-        .react-calendar__tile--now abbr { font-weight: bold; color: #38bdf8; background: #38bdf820; padding: 2px 6px; border-radius: 999px; }
-        .react-calendar__tile--active { background: #10b98110 !important; color: inherit !important; border: 1px solid #10b98130 !important; }
-        .react-calendar__tile--active:enabled:hover { background: #10b98120 !important; }
-        .react-calendar__tile--hasActive { background: transparent !important; }
-        .react-calendar__navigation button { color: white; font-size: 1.2rem; min-width: 44px; background: none; }
-        .react-calendar__navigation button:enabled:hover, .react-calendar__navigation button:enabled:focus { background-color: #1e293b; border-radius: 8px; }
-        .react-calendar__month-view__weekdays { text-transform: uppercase; font-weight: bold; font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem; text-align: center; }
+        .react-calendar__tile { color: #475569; padding: 1em !important; height: 160px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; border: 1px solid #f1f5f9 !important; overflow: hidden; transition: all 0.2s; background: white; }
+        .react-calendar__tile:enabled:hover, .react-calendar__tile:enabled:focus { background-color: #f8fafc; border-color: #3b82f640 !important; }
+        .react-calendar__tile--now { background: #eff6ff !important; border-color: #3b82f630 !important; }
+        .react-calendar__tile--now abbr { font-weight: 800; color: #3b82f6; background: white; padding: 4px 10px; border-radius: 99px; shadow-sm; border: 1px solid #3b82f620; }
+        .react-calendar__tile--active { background: #f1f5f9 !important; color: #1e293b !important; border: 1px solid #cbd5e1 !important; }
+        .react-calendar__tile--active:enabled:hover { background: #e2e8f0 !important; }
+        .react-calendar__navigation { margin-bottom: 2rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem; }
+        .react-calendar__navigation button { color: #0f172a; font-size: 1.1rem; font-weight: 700; min-width: 44px; background: none; transition: all 0.2s; border-radius: 12px; }
+        .react-calendar__navigation button:enabled:hover, .react-calendar__navigation button:enabled:focus { background-color: #f1f5f9; }
+        .react-calendar__month-view__weekdays { text-transform: uppercase; font-weight: 800; font-size: 0.7rem; color: #94a3b8; margin-bottom: 1rem; text-align: center; }
         .react-calendar__month-view__weekdays__weekday abbr { text-decoration: none; }
-        .react-calendar__month-view__days__day--neighboringMonth { color: #334155; }
+        .react-calendar__month-view__days__day--neighboringMonth { color: #e2e8f0; }
+        .react-calendar__month-view__days__day--weekend { color: #f43f5e; }
       `}</style>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white p-8 md:p-12 font-sans">
-            <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+        <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] p-6 pt-20 md:p-10 md:pt-20 lg:p-12 lg:pt-20 font-sans">
+            <div className="max-w-7xl mx-auto animate-in fade-in duration-700">
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
                     <div>
-                        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">Tasks Management</h1>
-                        <p className="text-slate-500 mt-2">부여된 업무를 추적하고 협업하세요.</p>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-bold uppercase tracking-wider mb-4 shadow-sm">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                            </span>
+                            Collaborative Workspace
+                        </div>
+                        <h1 className="text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">Tasks Management</h1>
+                        <p className="text-slate-500 mt-3 font-medium text-lg max-w-lg">팀의 생산성을 높이고 실시간으로 업무 진행 상황을 추적하세요.</p>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="bg-white p-1 rounded-2xl border border-slate-200 flex shadow-sm">
                             <button
                                 onClick={() => setView('list')}
-                                className={`px-4 py-2 rounded-lg text-sm transition-all ${view === 'list' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
                             >
-                                Board
+                                Kanban
                             </button>
                             <button
                                 onClick={() => setView('calendar')}
-                                className={`px-4 py-2 rounded-lg text-sm transition-all ${view === 'calendar' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${view === 'calendar' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}
                             >
                                 Calendar
                             </button>
@@ -289,18 +311,18 @@ const TasksPage = () => {
 
                         <button
                             onClick={handleCreateTask}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-emerald-900/20 transition-all cursor-pointer"
+                            className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-3.5 rounded-2xl flex items-center gap-2 font-bold shadow-xl shadow-slate-200 transition-all cursor-pointer active:scale-95"
                         >
-                            <Plus className="w-5 h-5" />
-                            Assign Task
+                            <Plus className="w-5 h-5 shadow-sm" />
+                            New Task
                         </button>
                     </div>
                 </div>
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-slate-500 animate-pulse">
-                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        업무를 불러오는 중입니다...
+                    <div className="flex flex-col items-center justify-center min-h-[40vh] text-slate-400">
+                        <div className="w-14 h-14 border-4 border-blue-600/10 border-t-blue-600 rounded-full animate-spin mb-6"></div>
+                        <div className="font-bold tracking-tight animate-pulse text-lg">LOADING WORKSPACE...</div>
                     </div>
                 ) : view === 'list' ? renderListView() : renderCalendarView()}
             </div>

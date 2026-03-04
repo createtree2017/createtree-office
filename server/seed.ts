@@ -10,16 +10,26 @@ async function seed() {
     const hashedPassword = await bcrypt.hash("admin1234", 10);
 
     try {
-        await db.insert(users).values({
-            email: "admin@test.com",
-            password: hashedPassword,
-            name: "관리자",
-            role: "ADMIN",
-            isApproved: true,
-        });
-        console.log("Success: admin@test.com / admin1234");
+        // 이메일이 중복되면 승인 상태와 역할을 업데이트
+        await db.insert(users)
+            .values({
+                email: "admin@test.com",
+                password: hashedPassword,
+                name: "관리자",
+                role: "ADMIN",
+                isApproved: true,
+            })
+            .onConflictDoUpdate({
+                target: users.email,
+                set: {
+                    isApproved: true,
+                    role: "ADMIN",
+                    password: hashedPassword
+                }
+            });
+        console.log("Success: admin@test.com is now an APPROVED ADMIN.");
     } catch (err) {
-        console.log("Admin user might already exist.");
+        console.error("Error seeding admin user:", err);
     }
     process.exit(0);
 }
