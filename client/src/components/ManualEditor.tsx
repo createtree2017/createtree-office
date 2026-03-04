@@ -4,7 +4,6 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
-import Typography from '@tiptap/extension-typography';
 import Underline from '@tiptap/extension-underline';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
@@ -28,19 +27,23 @@ const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) =
 
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            StarterKit.configure({
+                // Typography 확장과 충돌하는 기능 비활성화
+                // (StarterKit은 Underline을 포함하지 않으므로 별도 추가는 정상)
+            }),
             Placeholder.configure({
-                placeholder: '내용을 입력하려면 텍스트를 입력하세요...',
+                placeholder: '내용을 입력하세요...',
             }),
             TaskList,
             TaskItem.configure({
                 nested: true,
             }),
             Highlight,
-            Typography,
+            // Typography는 StarterKit의 일부 mark와 이름이 겹칠 수 있어 제거
             Underline,
         ],
         content: initialContent,
+        immediatelyRender: false,
         editable: editable,
         onSelectionUpdate: ({ editor }) => {
             if (!editable) return;
@@ -125,8 +128,8 @@ const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) =
             {/* Fixed Toolbar for editing */}
             {editable && (
                 <div className="flex flex-wrap gap-1 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
-                    <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('bold') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Bold size={15} /></button>
-                    <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('italic') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Italic size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-xl text-sm hover:bg-white dark:hover:bg-slate-700 transition-all ${editor.isActive('bold') ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}><Bold size={15} /></button>
+                    <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-xl text-sm hover:bg-white dark:hover:bg-slate-700 transition-all ${editor.isActive('italic') ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}><Italic size={15} /></button>
                     <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('underline') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><UnderlineIcon size={15} /></button>
                     <button onClick={() => editor.chain().focus().toggleHighlight().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('highlight') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Highlighter size={15} /></button>
                     <div className="w-px bg-slate-200 mx-1 self-stretch" />
@@ -143,7 +146,7 @@ const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) =
                 </div>
             )}
 
-            <div className={`prose prose-slate max-w-none min-h-[300px] p-8 rounded-2xl bg-white border border-slate-100 transition-all ${editable ? 'cursor-text focus-within:border-blue-200 focus-within:ring-4 focus-within:ring-blue-50' : 'cursor-default'}`}>
+            <div className={`prose prose-slate dark:prose-invert max-w-none min-h-[300px] p-8 rounded-2xl bg-white dark:bg-[hsl(var(--secondary))] border border-slate-200 dark:border-[hsl(var(--border))] transition-all ${editable ? 'cursor-text focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10' : 'cursor-default'}`}>
                 <EditorContent editor={editor} />
             </div>
         </div>

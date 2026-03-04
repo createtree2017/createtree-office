@@ -1,74 +1,204 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================
+   라이트 모드 CSS 변수 (시인성 강화 버전)
+   ===================================================== */
 @layer base {
   :root {
-    --background: 210 40% 98%; /* Slate-50: #F8FAFC */
-    --foreground: 222 47% 11%;    /* Slate-900: #0F172A */
+    --background: 210 20% 96%;
+    /* 더 진한 배경 #F1F5F9 */
+    --foreground: 222 47% 11%;
+    /* 진한 텍스트 #0F172A */
 
-    --card: 0 0% 100%;             /* White: #FFFFFF */
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 221 83% 53%;        /* Blue-600: #2563EB */
+    --primary: 221 83% 53%;
+    /* Blue-600 #2563EB */
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 30% 92%;
+    /* 더 진한 secondary #E2EAF4 */
     --secondary-foreground: 222 47% 11.2%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 30% 92%;
+    --muted-foreground: 215 25% 35%;
+    /* 더 진한 muted 텍스트 */
 
-    --accent: 210 40% 96.1%;
+    --accent: 210 30% 92%;
     --accent-foreground: 222 47% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;   /* Slate-200: #E2E8F0 */
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 214 32% 82%;
+    /* 더 진한 border #C8D7EA */
+    --input: 214 32% 82%;
+    --ring: 221 83% 53%;
 
     --radius: 0.75rem;
+
+    /* 추가 시인성 변수 */
+    --surface: 0 0% 100%;
+    /* 카드 배경 */
+    --surface-elevated: 210 20% 98%;
+    /* 약간 올라온 표면 */
+    --divider: 214 32% 78%;
+    /* 구분선 */
+  }
+
+  /* =====================================================
+     다크 모드 CSS 변수
+     ===================================================== */
+  .dark {
+    --background: 222 47% 8%;
+    /* 매우 진한 남색 #0D1117 */
+    --foreground: 210 40% 93%;
+    /* 밝은 텍스트 #E8EDF5 */
+
+    --card: 222 40% 13%;
+    /* 카드 배경 #161D2D */
+    --card-foreground: 210 40% 93%;
+
+    --popover: 222 40% 13%;
+    --popover-foreground: 210 40% 93%;
+
+    --primary: 213 94% 62%;
+    /* 밝은 블루 #4A9EFF */
+    --primary-foreground: 222 47% 8%;
+
+    --secondary: 222 35% 18%;
+    /* 버튼 secondary #1E2A3F */
+    --secondary-foreground: 210 40% 93%;
+
+    --muted: 222 35% 18%;
+    --muted-foreground: 215 20% 60%;
+    /* 보조 텍스트 */
+
+    --accent: 222 35% 18%;
+    --accent-foreground: 210 40% 93%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 35% 22%;
+    /* 다크 border */
+    --input: 222 35% 22%;
+    --ring: 213 94% 62%;
+
+    --surface: 222 40% 13%;
+    --surface-elevated: 222 38% 16%;
+    --divider: 222 35% 22%;
   }
 }
 
+/* =====================================================
+   기본 body 스타일
+   ===================================================== */
 @layer base {
   body {
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Pretendard', 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    transition: background-color 0.3s ease, color 0.2s ease;
+  }
+
+  * {
+    border-color: hsl(var(--border));
   }
 }
 
+/* =====================================================
+   컴포넌트 스타일
+   ===================================================== */
 @layer components {
+
+  /* 라이트 모드: 뚜렷한 경계선 + 배경 분리 */
   .bento-card {
-    @apply bg-white border border-[hsl(var(--border))] rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.03)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.05),0_4px_6px_-4px_rgba(0,0,0,0.05)] transition-all duration-300;
-  }
-  
-  .glass-sidebar {
-    @apply bg-white/50 backdrop-blur-md border-r border-[hsl(var(--border))];
+    @apply rounded-2xl transition-all duration-300;
+    background: hsl(var(--surface));
+    border: 1.5px solid hsl(var(--border));
+    box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.06), 0 2px 8px -2px rgba(0, 0, 0, 0.04);
   }
 
+  .bento-card:hover {
+    border-color: hsl(var(--primary) / 0.4);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.10), 0 4px 8px -4px rgba(0, 0, 0, 0.06);
+  }
+
+  /* 다크모드 카드 */
+  .dark .bento-card {
+    background: hsl(var(--card));
+    border-color: hsl(var(--border));
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  .dark .bento-card:hover {
+    border-color: hsl(var(--primary) / 0.5);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* 사이드바 */
+  .glass-sidebar {
+    background: hsl(var(--surface));
+    border-right: 1.5px solid hsl(var(--border));
+  }
+
+  .dark .glass-sidebar {
+    background: hsl(var(--card));
+    border-right-color: hsl(var(--border));
+  }
+
+  /* 스크롤바 */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-slate-200 rounded-full;
+    @apply bg-slate-300 dark:bg-slate-600 rounded-full;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate-300;
+    @apply bg-slate-400 dark:bg-slate-500;
+  }
+
+  /* 입력 필드 공통 */
+  .input-field {
+    @apply w-full rounded-xl px-4 py-3 text-sm font-medium outline-none transition-all;
+    background: hsl(var(--background));
+    border: 1.5px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+
+  .input-field:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
+  }
+
+  .dark .input-field {
+    background: hsl(var(--secondary));
+  }
+
+  /* 섹션 구분선 */
+  .divider {
+    border-color: hsl(var(--divider));
   }
 }
 
-/* Tiptap Editor Styling Overrides for Light Theme */
+/* =====================================================
+   Tiptap Editor (라이트/다크 공통)
+   ===================================================== */
 .prose-invert {
   --tw-prose-body: #334155;
   --tw-prose-headings: #0f172a;
@@ -77,13 +207,32 @@
   --tw-prose-bold: #0f172a;
   --tw-prose-counters: #64748b;
   --tw-prose-bullets: #94a3b8;
-  --tw-prose-hr: #e2e8f0;
+  --tw-prose-hr: #cbd5e1;
   --tw-prose-quotes: #0f172a;
   --tw-prose-quote-borders: #e2e8f0;
   --tw-prose-captions: #64748b;
   --tw-prose-code: #0f172a;
   --tw-prose-pre-code: #e2e8f0;
   --tw-prose-pre-bg: #1e293b;
-  --tw-prose-th-borders: #e2e8f0;
-  --tw-prose-td-borders: #f1f5f9;
+  --tw-prose-th-borders: #cbd5e1;
+  --tw-prose-td-borders: #e2e8f0;
+}
+
+.dark .prose-invert {
+  --tw-prose-body: #94a3b8;
+  --tw-prose-headings: #e2e8f0;
+  --tw-prose-lead: #94a3b8;
+  --tw-prose-links: #60a5fa;
+  --tw-prose-bold: #e2e8f0;
+  --tw-prose-counters: #64748b;
+  --tw-prose-bullets: #475569;
+  --tw-prose-hr: #334155;
+  --tw-prose-quotes: #94a3b8;
+  --tw-prose-quote-borders: #334155;
+  --tw-prose-captions: #64748b;
+  --tw-prose-code: #e2e8f0;
+  --tw-prose-pre-code: #94a3b8;
+  --tw-prose-pre-bg: #0f172a;
+  --tw-prose-th-borders: #334155;
+  --tw-prose-td-borders: #1e293b;
 }

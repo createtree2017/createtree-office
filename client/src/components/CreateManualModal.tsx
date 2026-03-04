@@ -53,14 +53,14 @@ const CreateManualModal = ({ onSuccess, initialParentId = null }: CreateManualMo
     };
 
     return (
-        <div className="p-8 bg-white rounded-3xl">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-8 tracking-tight">새 항목 생성</h2>
+        <div className="p-8 bg-white dark:bg-[hsl(var(--card))] rounded-3xl">
+            <h2 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 mb-8 tracking-tight">새 항목 생성</h2>
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="flex gap-4">
                     <button
                         type="button"
                         onClick={() => { setType('PAGE'); setIcon('📝'); }}
-                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all duration-300 ${type === 'PAGE' ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-md shadow-blue-100 scale-[1.02]' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all duration-300 ${type === 'PAGE' ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-600 dark:text-blue-400 shadow-md shadow-blue-100 dark:shadow-none scale-[1.02]' : 'bg-white dark:bg-[hsl(var(--secondary))] border-slate-200 dark:border-[hsl(var(--border))] text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-500'}`}
                     >
                         <FileText size={28} />
                         <span className="font-bold text-sm">페이지</span>
@@ -68,7 +68,7 @@ const CreateManualModal = ({ onSuccess, initialParentId = null }: CreateManualMo
                     <button
                         type="button"
                         onClick={() => { setType('FOLDER'); setIcon('📁'); }}
-                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all duration-300 ${type === 'FOLDER' ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-md shadow-blue-100 scale-[1.02]' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all duration-300 ${type === 'FOLDER' ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-600 dark:text-blue-400 shadow-md shadow-blue-100 dark:shadow-none scale-[1.02]' : 'bg-white dark:bg-[hsl(var(--secondary))] border-slate-200 dark:border-[hsl(var(--border))] text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-500'}`}
                     >
                         <Folder size={28} />
                         <span className="font-bold text-sm">폴더</span>
@@ -82,14 +82,14 @@ const CreateManualModal = ({ onSuccess, initialParentId = null }: CreateManualMo
                             type="text"
                             value={icon}
                             onChange={(e) => setIcon(e.target.value)}
-                            className="w-20 bg-slate-50 border border-slate-200 rounded-2xl px-2 py-4 text-center text-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                            className="w-20 bg-slate-50 dark:bg-[hsl(var(--secondary))] border border-slate-200 dark:border-[hsl(var(--border))] rounded-2xl px-2 py-4 text-center text-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
                             placeholder="📝"
                         />
                         <input
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                            className="flex-1 bg-slate-50 dark:bg-[hsl(var(--secondary))] border border-slate-200 dark:border-[hsl(var(--border))] rounded-2xl px-5 py-4 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
                             required
                             placeholder={type === 'PAGE' ? "예: 신입 사원 온보딩" : "예: 인사팀 매뉴얼"}
                         />
@@ -101,7 +101,7 @@ const CreateManualModal = ({ onSuccess, initialParentId = null }: CreateManualMo
                     <select
                         value={minRoleToEdit}
                         onChange={(e) => setMinRoleToEdit(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 appearance-none font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer"
+                        className="w-full bg-slate-50 dark:bg-[hsl(var(--secondary))] border border-slate-200 dark:border-[hsl(var(--border))] rounded-2xl px-5 py-4 text-slate-900 dark:text-slate-100 appearance-none font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer"
                     >
                         <option value="USER">직원 (누구나 수정 가능)</option>
                         <option value="MANAGER">관리자 이상</option>
@@ -113,14 +113,14 @@ const CreateManualModal = ({ onSuccess, initialParentId = null }: CreateManualMo
                     <button
                         type="button"
                         onClick={closeModal}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 rounded-2xl transition-all cursor-pointer"
+                        className="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl transition-all cursor-pointer"
                     >
                         취소
                     </button>
                     <button
                         type="submit"
                         disabled={loading}
-                        className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl transition-all disabled:opacity-50 shadow-xl shadow-slate-200 cursor-pointer"
+                        className="flex-1 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-500 text-white font-bold py-4 rounded-2xl transition-all disabled:opacity-50 shadow-xl shadow-slate-200 dark:shadow-blue-900/30 cursor-pointer"
                     >
                         {loading ? '생성 중...' : '생성하기'}
                     </button>

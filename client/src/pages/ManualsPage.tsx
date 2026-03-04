@@ -4,7 +4,8 @@ import ManualEditor from '../components/ManualEditor';
 import CreateManualModal from '../components/CreateManualModal';
 import { useModal } from '../contexts/ModalContext';
 import toast from 'react-hot-toast';
-import { ChevronRight, ChevronDown, Folder, FileText, Plus, Home, ChevronRight as ChevronRightIcon, MoreHorizontal, Trash2, Pencil } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileText, Plus, Home, ChevronRight as ChevronRightIcon, MoreHorizontal, Trash2, Pencil, GripVertical } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Manual {
     id: number;
@@ -14,6 +15,7 @@ interface Manual {
     type: 'PAGE' | 'FOLDER';
     icon?: string;
     minRoleToEdit: string;
+    order: number;
 }
 
 const ManualsPage = () => {
@@ -219,115 +221,197 @@ const ManualsPage = () => {
         openModal(<CreateManualModal onSuccess={fetchManuals} initialParentId={parentId} />);
     };
 
-    const renderTreeItem = (item: Manual & { children: any[] }, level: number = 0) => {
+    // 드래그로 순서 변경
+    const handleReorder = async (result: DropResult) => {
+        const { destination, source, draggableId } = result;
+        if (!destination) return;
+        if (destination.droppableId !== source.droppableId) return; // 같은 레벨만
+        if (destination.index === source.index) return;
+
+        // droppableId = 'level_{parentId}' 형태
+        const parentIdStr = destination.droppableId.replace('level_', '');
+        const parentId = parentIdStr === 'null' ? null : parseInt(parentIdStr);
+
+        // 해당 레벨의 항목 추출 후 순서 재배치
+        const siblings = manuals
+            .filter(m => m.parentId === parentId)
+            .sort((a, b) => a.order - b.order);
+
+        const reordered = [...siblings];
+        const [moved] = reordered.splice(source.index, 1);
+        reordered.splice(destination.index, 0, moved);
+
+        // 낙관적 UI 업데이트
+        const updatedOrders = reordered.map((m, i) => ({ ...m, order: i }));
+        setManuals(prev => {
+            const otherItems = prev.filter(m => m.parentId !== parentId);
+            return [...otherItems, ...updatedOrders].sort((a, b) => a.order - b.order);
+        });
+
+        // API에 변경된 항목들 저장
+        const token = getToken();
+        const changedItems = updatedOrders.filter((m, i) => siblings[i]?.id !== m.id);
+        try {
+            await Promise.all(
+                updatedOrders.map((m, i) =>
+                    fetch(`/api/manuals/${m.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ order: i }),
+                    })
+                )
+            );
+        } catch {
+            toast.error('순서 저장 중 오류가 발생했습니다.');
+            fetchManuals();
+        }
+    };
+
+    // 드래그 핸들을 포함한 단일 아이템 렌더 (인덱스 포함)
+    const renderTreeItem = (item: Manual & { children: any[] }, index: number, level: number = 0) => {
         const isSelected = parseInt(id || '0') === item.id;
         const isExpanded = expandedFolders.has(item.id);
         const isRenaming = renameId === item.id;
 
         return (
-            <div key={item.id} className="select-none">
-                <div
-                    onClick={() => {
-                        if (isRenaming) return;
-                        item.type === 'PAGE' ? navigate(`/manuals/${item.id}`) : toggleFolder(item.id, { stopPropagation: () => { } } as any);
-                    }}
-                    className={`group flex items-center py-1.5 px-3 rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50 text-blue-600 font-semibold shadow-sm border border-blue-100' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-transparent'
-                        }`}
-                    style={{ marginLeft: `${level * 12}px` }}
-                >
-                    <span className="w-5 h-5 mr-1 flex items-center justify-center">
-                        {item.type === 'FOLDER' && (
-                            <button onClick={(e) => toggleFolder(item.id, e)} className="p-0.5 hover:bg-white hover:shadow-sm rounded transition-colors text-slate-400">
-                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            </button>
-                        )}
-                    </span>
-                    <span className="mr-2.5 flex items-center justify-center w-5 h-5">
-                        {item.icon ? (
-                            <span className="text-base">{item.icon}</span>
-                        ) : (
-                            item.type === 'FOLDER' ? <Folder size={16} className="text-blue-500/60" /> : <FileText size={16} className="text-slate-400" />
-                        )}
-                    </span>
-
-                    {isRenaming ? (
-                        <input
-                            autoFocus
-                            value={renameValue}
-                            onChange={e => setRenameValue(e.target.value)}
-                            onBlur={() => handleRenameSubmit(item.id)}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') handleRenameSubmit(item.id);
-                                if (e.key === 'Escape') setRenameId(null);
+            <Draggable key={item.id} draggableId={`manual_${item.id}`} index={index} isDragDisabled={!canManage}>
+                {(draggableProvided, draggableSnapshot) => (
+                    <div
+                        ref={draggableProvided.innerRef}
+                        {...draggableProvided.draggableProps}
+                        className={`select-none transition-all ${draggableSnapshot.isDragging ? 'opacity-90 z-50' : ''}`}
+                    >
+                        <div
+                            onClick={() => {
+                                if (isRenaming) return;
+                                item.type === 'PAGE' ? navigate(`/manuals/${item.id}`) : toggleFolder(item.id, { stopPropagation: () => { } } as any);
                             }}
-                            onClick={e => e.stopPropagation()}
-                            className="flex-1 text-[13px] bg-white border border-blue-400 rounded px-1 py-0 outline-none text-slate-900"
-                        />
-                    ) : (
-                        <span className="flex-1 truncate text-[13px]">
-                            {item.title}
-                        </span>
-                    )}
-
-                    {/* CRUD 버튼들 (hover 시 표시) */}
-                    {canManage && !isRenaming && (
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
-                            {item.type === 'FOLDER' && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); handleCreateClick(item.id); }}
-                                    className="p-1 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-blue-600 transition-all border border-transparent hover:border-slate-100"
-                                    title="하위 항목 추가"
+                            className={`group flex items-center py-1.5 px-3 rounded-xl cursor-pointer transition-all ${draggableSnapshot.isDragging
+                                ? 'bg-white shadow-lg border border-blue-200 ring-2 ring-blue-400/30'
+                                : isSelected
+                                    ? 'bg-blue-50 text-blue-600 font-semibold shadow-sm border border-blue-100'
+                                    : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-transparent'
+                                }`}
+                            style={{ marginLeft: `${level * 12}px` }}
+                        >
+                            {/* 드래그 핸들 (canManage일 때만 hover 시 표시) */}
+                            {canManage && (
+                                <span
+                                    {...draggableProvided.dragHandleProps}
+                                    className="w-4 h-4 mr-0.5 flex items-center justify-center opacity-0 group-hover:opacity-40 hover:!opacity-80 cursor-grab active:cursor-grabbing text-slate-400 shrink-0"
+                                    onClick={e => e.stopPropagation()}
                                 >
-                                    <Plus size={13} />
-                                </button>
+                                    <GripVertical size={13} />
+                                </span>
                             )}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    const rect = (e.target as HTMLElement).getBoundingClientRect();
-                                    setContextMenu({ id: item.id, x: rect.right, y: rect.bottom });
-                                }}
-                                className="p-1 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-slate-700 transition-all border border-transparent hover:border-slate-100"
-                                title="더보기"
-                            >
-                                <MoreHorizontal size={13} />
-                            </button>
+                            <span className="w-5 h-5 mr-1 flex items-center justify-center">
+                                {item.type === 'FOLDER' && (
+                                    <button onClick={(e) => toggleFolder(item.id, e)} className="p-0.5 hover:bg-white hover:shadow-sm rounded transition-colors text-slate-400">
+                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                    </button>
+                                )}
+                            </span>
+                            <span className="mr-2.5 flex items-center justify-center w-5 h-5">
+                                {item.icon ? (
+                                    <span className="text-base">{item.icon}</span>
+                                ) : (
+                                    item.type === 'FOLDER' ? <Folder size={16} className="text-blue-500/60" /> : <FileText size={16} className="text-slate-400" />
+                                )}
+                            </span>
+
+                            {isRenaming ? (
+                                <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={e => setRenameValue(e.target.value)}
+                                    onBlur={() => handleRenameSubmit(item.id)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') handleRenameSubmit(item.id);
+                                        if (e.key === 'Escape') setRenameId(null);
+                                    }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="flex-1 text-[13px] bg-white border border-blue-400 rounded px-1 py-0 outline-none text-slate-900"
+                                />
+                            ) : (
+                                <span className="flex-1 truncate text-[13px]">{item.title}</span>
+                            )}
+
+                            {/* CRUD 버튼들 (hover 시 표시) */}
+                            {canManage && !isRenaming && (
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                                    {item.type === 'FOLDER' && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleCreateClick(item.id); }}
+                                            className="p-1 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-blue-600 transition-all border border-transparent hover:border-slate-100"
+                                            title="하위 항목 추가"
+                                        >
+                                            <Plus size={13} />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const rect = (e.target as HTMLElement).getBoundingClientRect();
+                                            setContextMenu({ id: item.id, x: rect.right, y: rect.bottom });
+                                        }}
+                                        className="p-1 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-slate-700 transition-all border border-transparent hover:border-slate-100"
+                                        title="더보기"
+                                    >
+                                        <MoreHorizontal size={13} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-                {item.type === 'FOLDER' && isExpanded && (
-                    <div className="mt-0.5">
-                        {item.children.map(child => renderTreeItem(child, level + 1))}
+                        {/* 폴더 하위 항목: 하위 레벨의 Droppable */}
+                        {item.type === 'FOLDER' && isExpanded && (
+                            <div className="mt-0.5">
+                                {renderTreeLevel(item.children, item.id, level + 1)}
+                            </div>
+                        )}
                     </div>
                 )}
-            </div>
+            </Draggable>
         );
     };
+
+    // 한 레벨의 아이템들을 Droppable로 감싸는 렌더 함수
+    const renderTreeLevel = (items: (Manual & { children: any[] })[], parentId: number | null, level: number = 0) => (
+        <Droppable droppableId={`level_${parentId}`} direction="vertical">
+            {(droppableProvided, droppableSnapshot) => (
+                <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
+                    className={`space-y-0.5 rounded-lg transition-all ${droppableSnapshot.isDraggingOver ? 'bg-blue-50/60 ring-1 ring-blue-200' : ''}`}
+                >
+                    {items.map((item, index) => renderTreeItem(item, index, level))}
+                    {droppableProvided.placeholder}
+                </div>
+            )}
+        </Droppable>
+    );
 
     const canEdit = currentManual && user && roles.indexOf(user.role) >= roles.indexOf(currentManual.minRoleToEdit);
 
     return (
-        <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] flex">
+        <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] flex pt-14">
             {/* Sidebar */}
-            <div className="w-72 glass-sidebar p-5 flex flex-col h-screen sticky top-0">
-                <div className="flex items-center justify-between mb-8 px-2">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">CT</div>
-                        <h2 className="text-xl font-extrabold tracking-tight text-slate-900">createTree</h2>
-                    </div>
-                    {canManage && (
+            <div className="w-72 glass-sidebar p-5 flex flex-col h-[calc(100vh-56px)] sticky top-14">
+                {canManage && (
+                    <div className="mb-8 px-2">
                         <button
                             onClick={() => handleCreateClick(null)}
-                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-all cursor-pointer border border-slate-200"
-                            title="새 페이지/폴더"
+                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/20 cursor-pointer"
                         >
-                            <Plus size={18} />
+                            <Plus size={15} />
+                            새로만들기
                         </button>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <div className="space-y-0.5 overflow-y-auto flex-1 custom-scrollbar pr-2">
-                    {manualTree.map(item => renderTreeItem(item))}
+                    <DragDropContext onDragEnd={handleReorder}>
+                        {renderTreeLevel(manualTree, null)}
+                    </DragDropContext>
                     {manuals.length === 0 && !loading && (
                         <div className="text-center py-10 px-4">
                             <p className="text-slate-400 text-sm">표시할 문서가 없습니다.</p>

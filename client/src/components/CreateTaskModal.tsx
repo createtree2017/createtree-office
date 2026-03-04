@@ -19,7 +19,7 @@ const CreateTaskModal = ({ onSuccess, initialData }: CreateTaskModalProps) => {
     const [title, setTitle] = useState(initialData?.title || '');
     const [description, setDescription] = useState(initialData?.description || '');
     const [status, setStatus] = useState(initialData?.status || 'PENDING');
-    const [dueDate, setDueDate] = useState(initialData?.dueDate ? new Date(initialData.dueDate).toISOString().split('T')[0] : '');
+    const [dueDate, setDueDate] = useState(initialData?.dueDate ? initialData.dueDate.slice(0, 10) : '');
     const [assigneeId, setAssigneeId] = useState<number | string>(initialData?.assigneeId || '');
     const [loading, setLoading] = useState(false);
 

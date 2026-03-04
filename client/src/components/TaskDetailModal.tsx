@@ -71,7 +71,7 @@ const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
     };
 
     return (
-        <div className="relative bg-white rounded-3xl overflow-hidden">
+        <div className="relative bg-white dark:bg-[hsl(var(--card))] rounded-3xl overflow-hidden">
             {/* Header with Background Accent */}
             <div className="h-28 bg-slate-50 border-b border-slate-100 flex items-center px-8">
                 <div className={`px-4 py-1.5 rounded-full text-xs font-bold border-2 shadow-sm ${getStatusColor(task.status)}`}>
