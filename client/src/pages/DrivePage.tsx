@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft } from 'lucide-react';
+import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface DriveFile {
@@ -16,6 +16,9 @@ const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const DrivePage = () => {
     const [files, setFiles] = useState<DriveFile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // 모달 뷰어 상태
+    const [viewerUrl, setViewerUrl] = useState<string | null>(null);
 
     // 폴더 탐색 기록 (스택 구조)
     const [folderStack, setFolderStack] = useState<{ id: string; name: string }[]>([
@@ -65,6 +68,12 @@ const DrivePage = () => {
     const handleFolderClick = (file: DriveFile, e: React.MouseEvent) => {
         e.preventDefault();
         setFolderStack(prev => [...prev, { id: file.id, name: file.name }]);
+    };
+
+    const handleFileClick = (file: DriveFile, e: React.MouseEvent) => {
+        e.preventDefault();
+        // 구글 드라이브 미리보기 뷰어 링크로 변환 (웹 뷰 링크 그대로 사용)
+        setViewerUrl(file.webViewLink);
     };
 
     const getFileIcon = (mimeType: string) => {
@@ -138,7 +147,7 @@ const DrivePage = () => {
                                 href={isFolder ? '#' : file.webViewLink} // 폴더면 href 무력화
                                 target={isFolder ? '_self' : '_blank'}
                                 rel="noopener noreferrer"
-                                onClick={isFolder ? (e) => handleFolderClick(file, e) : undefined}
+                                onClick={isFolder ? (e) => handleFolderClick(file, e) : (e) => handleFileClick(file, e)}
                                 className="group flex flex-col bg-white dark:bg-[hsl(var(--card))] border border-slate-200 dark:border-[hsl(var(--border))] rounded-2xl p-5 shadow-sm hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-500/50 transition-all cursor-pointer"
                             >
                                 <div className="flex items-start justify-between mb-4">
@@ -165,6 +174,49 @@ const DrivePage = () => {
                             </a>
                         );
                     })}
+                </div>
+            )}
+
+            {/* 문서 뷰어 모달 */}
+            {viewerUrl && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 md:px-10 py-10 animate-fade-in">
+                    <div className="w-full h-full max-w-7xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
+                        {/* 닫기 버튼 오버레이 */}
+                        <div className="absolute top-4 right-4 z-10 flex gap-2">
+                            <a
+                                href={viewerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-slate-800/80 hover:bg-black/90 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md flex items-center gap-2 px-4"
+                                title="새 창에서 열기"
+                            >
+                                <ExternalLink size={18} />
+                                <span className="text-sm font-semibold">새창 열기</span>
+                            </a>
+                            <button
+                                onClick={() => setViewerUrl(null)}
+                                className="bg-slate-800/80 hover:bg-rose-600 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md"
+                                title="창 닫기"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {/* 뷰어 iframe 영역 */}
+                        <div className="w-full h-full bg-slate-100 dark:bg-slate-800 relative flex items-center justify-center">
+                            {/* 로딩 표시 (iframe 로드 전까지) */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-0 text-slate-400">
+                                <Loader2 size={32} className="animate-spin text-blue-500 mb-2" />
+                                <p className="text-sm">문서를 불러오는 중입니다...</p>
+                            </div>
+                            <iframe
+                                src={viewerUrl}
+                                className="w-full h-full z-10 border-0"
+                                title="구글 문서 뷰어"
+                                allow="autoplay"
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
