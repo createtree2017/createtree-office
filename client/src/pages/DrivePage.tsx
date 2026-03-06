@@ -19,6 +19,7 @@ const DrivePage = () => {
 
     // 모달 뷰어 상태
     const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+    const [viewerTitle, setViewerTitle] = useState<string>('');
 
     // 폴더 탐색 기록 (스택 구조)
     const [folderStack, setFolderStack] = useState<{ id: string; name: string }[]>([
@@ -83,6 +84,7 @@ const DrivePage = () => {
         }
 
         setViewerUrl(modifiedUrl);
+        setViewerTitle(file.name);
     };
 
     const getFileIcon = (mimeType: string) => {
@@ -188,31 +190,47 @@ const DrivePage = () => {
 
             {/* 문서 뷰어 모달 */}
             {viewerUrl && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-6 md:p-8 lg:p-12 animate-fade-in">
-                    <div className="w-full h-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
-                        {/* 닫기 버튼 오버레이 (iframe 위로 확실히 올라오도록 z-[100] 지정 및 위치 조정) */}
-                        <div className="absolute top-4 right-4 z-[100] flex items-center gap-2 pointer-events-auto">
-                            <a
-                                href={viewerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-slate-800/90 hover:bg-black text-white px-4 py-2.5 rounded-full shadow-lg transition-all backdrop-blur-md flex items-center gap-2"
-                                title="새 창에서 열기"
-                            >
-                                <ExternalLink size={18} />
-                                <span className="text-sm font-semibold">새창 열기</span>
-                            </a>
-                            <button
-                                onClick={() => setViewerUrl(null)}
-                                className="bg-slate-800/90 hover:bg-rose-600 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md"
-                                title="창 닫기"
-                            >
-                                <X size={24} />
-                            </button>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-4 md:p-6 lg:p-10 animate-fade-in">
+                    <div className="w-full h-full max-w-screen-2xl bg-slate-100 dark:bg-slate-900 rounded-xl shadow-2xl flex flex-col overflow-hidden relative border border-slate-200 dark:border-slate-800">
+                        {/* 상단 헤더 영역 (제목 및 닫기 버튼) */}
+                        <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                                    <FileText size={20} />
+                                </div>
+                                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 truncate">
+                                    {viewerTitle || '문서 뷰어'}
+                                </h2>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 ml-4">
+                                <a
+                                    href={viewerUrl.replace('&rm=minimal&chrome=false', '').replace('?rm=minimal&chrome=false', '')}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                    title="새 창에서 원본 열기"
+                                >
+                                    <ExternalLink size={16} />
+                                    <span className="hidden sm:inline">새창 열기</span>
+                                </a>
+                                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1"></div>
+                                <button
+                                    onClick={() => {
+                                        setViewerUrl(null);
+                                        setViewerTitle('');
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg transition-colors shadow-sm"
+                                    title="모달 창 닫기"
+                                >
+                                    <X size={18} />
+                                    <span>닫기</span>
+                                </button>
+                            </div>
                         </div>
 
-                        {/* 뷰어 iframe 영역 */}
-                        <div className="w-full h-full bg-slate-100 dark:bg-slate-800 relative flex items-center justify-center">
+                        {/* 뷰어 iframe 영역 (헤더 아래 꽉 차게) */}
+                        <div className="w-full h-full relative flex items-center justify-center flex-1 bg-white dark:bg-slate-950">
                             {/* 로딩 표시 (iframe 로드 전까지) */}
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-0 text-slate-400 pointer-events-none">
                                 <Loader2 size={32} className="animate-spin text-blue-500 mb-2" />
