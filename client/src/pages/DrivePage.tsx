@@ -72,8 +72,17 @@ const DrivePage = () => {
 
     const handleFileClick = (file: DriveFile, e: React.MouseEvent) => {
         e.preventDefault();
-        // 구글 드라이브 미리보기 뷰어 링크로 변환 (웹 뷰 링크 그대로 사용)
-        setViewerUrl(file.webViewLink);
+
+        // 브라우저 내부 iframe 모달에서 상단 메뉴와 헤더를 최대한 숨기기 위해
+        // 구글 뷰어 URL 주소 뒤에 파라미터 강제 추가 (rm=minimal 등)
+        let modifiedUrl = file.webViewLink;
+        if (modifiedUrl.includes('?')) {
+            modifiedUrl += '&rm=minimal&chrome=false';
+        } else {
+            modifiedUrl += '?rm=minimal&chrome=false';
+        }
+
+        setViewerUrl(modifiedUrl);
     };
 
     const getFileIcon = (mimeType: string) => {
