@@ -16,6 +16,7 @@ interface Manual {
     icon?: string;
     minRoleToEdit: string;
     order: number;
+    googleFormId?: string | null;
 }
 
 const ManualsPage = () => {
@@ -92,18 +93,28 @@ const ManualsPage = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleSave = async (content: string) => {
+    const handleSave = async (content: string, googleFormId?: string | null) => {
         if (!id) return;
+        const body: any = { content };
+        if (googleFormId !== undefined) {
+            body.googleFormId = googleFormId;
+        }
+
         const response = await fetch(`/api/manuals/${id}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`
             },
-            body: JSON.stringify({ content }),
+            body: JSON.stringify(body),
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
+
+        // 상태 업데이트
+        if (googleFormId !== undefined && currentManual) {
+            setCurrentManual({ ...currentManual, googleFormId });
+        }
     };
 
     const handleDelete = async (manualId: number) => {
@@ -510,13 +521,37 @@ const ManualsPage = () => {
                                 </div>
                             </div>
 
-                            <div className="bento-card p-6 md:p-10 min-h-[600px]">
+                            <div className="bento-card p-6 md:p-10 min-h-[600px] mb-8">
                                 <ManualEditor
                                     initialContent={currentManual.content}
+                                    googleFormId={currentManual.googleFormId}
                                     onSave={handleSave}
                                     editable={!!canEdit}
                                 />
                             </div>
+
+                            {/* Google Form Embed */}
+                            {currentManual.googleFormId && (
+                                <div className="mt-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                                    <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                                        <span className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center text-sm font-mono">FORM</span>
+                                        신청서/설문지 작성
+                                    </h3>
+                                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[800px]">
+                                        <iframe
+                                            src={`https://docs.google.com/forms/d/${currentManual.googleFormId}/viewform?embedded=true`}
+                                            width="100%"
+                                            height="100%"
+                                            frameBorder="0"
+                                            marginHeight={0}
+                                            marginWidth={0}
+                                            title="Google Form"
+                                        >
+                                            로드 중…
+                                        </iframe>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center min-h-[70vh] text-slate-400">

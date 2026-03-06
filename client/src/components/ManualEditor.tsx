@@ -15,15 +15,42 @@ import {
 
 interface ManualEditorProps {
     initialContent: string;
-    onSave: (content: string) => Promise<void>;
+    googleFormId?: string | null;
+    onSave: (content: string, googleFormId?: string | null) => Promise<void>;
     editable: boolean;
 }
 
-const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) => {
+const ManualEditor = ({ initialContent, googleFormId, onSave, editable }: ManualEditorProps) => {
     const [isSaving, setIsSaving] = useState(false);
     const [showToolbar, setShowToolbar] = useState(false);
     const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
+    const [googleForms, setGoogleForms] = useState<{ id: string, name: string }[]>([]);
+    const [isLoadingForms, setIsLoadingForms] = useState(false);
     const toolbarRef = useRef<HTMLDivElement>(null);
+
+    // GAS_URL은 사용자가 나중에 구성할 수 있도록 안내 필요
+    // 여기서는 환경 변수나 고정된 문자열을 사용할 수 있음
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz8y4b4VED1HVkF1SzVi0FX0Z4LPSbJFgUiPHrFphxpNrw7mSlCb0bB0OFx2OSgwf0Hkw/exec';
+
+    const fetchGoogleForms = async () => {
+        if (!editable || GAS_URL === 'YOUR_GAS_WEB_APP_URL') return;
+        setIsLoadingForms(true);
+        try {
+            const response = await fetch(GAS_URL);
+            const data = await response.json();
+            setGoogleForms(data);
+        } catch (error) {
+            console.error('Failed to fetch google forms:', error);
+        } finally {
+            setIsLoadingForms(false);
+        }
+    };
+
+    useEffect(() => {
+        if (editable && GAS_URL !== 'YOUR_GAS_WEB_APP_URL') {
+            fetchGoogleForms();
+        }
+    }, [editable]);
 
     const editor = useEditor({
         extensions: [
@@ -143,6 +170,26 @@ const ManualEditor = ({ initialContent, onSave, editable }: ManualEditorProps) =
                     <div className="w-px bg-slate-200 mx-1 self-stretch" />
                     <button onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('codeBlock') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Code size={15} /></button>
                     <button onClick={() => editor.chain().focus().toggleBlockquote().run()} className={`p-2 rounded-xl text-sm hover:bg-white transition-all ${editor.isActive('blockquote') ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Quote size={15} /></button>
+
+                    <div className="w-px bg-slate-200 mx-1 self-stretch" />
+
+                    {/* Google Form Selector */}
+                    <div className="flex items-center gap-2 ml-auto">
+                        <select
+                            value={googleFormId || ''}
+                            onChange={(e) => onSave(editor.getHTML(), e.target.value || null)}
+                            className="text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 min-w-[150px] transition-all"
+                            disabled={isLoadingForms}
+                        >
+                            <option value="">연결된 구글 폼 없음</option>
+                            {googleForms.map(form => (
+                                <option key={form.id} value={form.id}>{form.name}</option>
+                            ))}
+                        </select>
+                        {GAS_URL === 'YOUR_GAS_WEB_APP_URL' && (
+                            <span className="text-[10px] text-slate-400 italic">GAS URL 설정 필요</span>
+                        )}
+                    </div>
                 </div>
             )}
 

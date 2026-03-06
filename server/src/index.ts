@@ -8,6 +8,7 @@ import authRouter from "./routes/auth.js";
 import manualsRouter from "./routes/manuals.js";
 import adminRouter from "./routes/admin.js";
 import tasksRouter from "./routes/tasks.js";
+import webhookRouter from "./routes/webhook.js";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/manuals", manualsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/tasks", tasksRouter);
+app.use("/api/webhook", webhookRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });

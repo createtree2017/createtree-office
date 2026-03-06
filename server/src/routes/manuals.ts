@@ -36,6 +36,7 @@ router.post("/", authenticateToken, async (req: AuthRequest, res) => {
             type: type || "PAGE",
             icon: icon || null,
             order: order || 0,
+            googleFormId: req.body.googleFormId || null,
         }).returning();
 
         res.status(201).json({ success: true, data: newManual });
@@ -89,6 +90,7 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
                 type: type ?? manual.type,
                 icon: icon ?? manual.icon,
                 order: order ?? manual.order,
+                googleFormId: req.body.googleFormId !== undefined ? req.body.googleFormId : manual.googleFormId,
                 updatedAt: new Date()
             })
             .where(eq(manuals.id, parseInt(id)))
