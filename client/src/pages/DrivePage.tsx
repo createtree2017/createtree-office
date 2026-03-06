@@ -179,15 +179,15 @@ const DrivePage = () => {
 
             {/* 문서 뷰어 모달 */}
             {viewerUrl && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 md:px-10 py-10 animate-fade-in">
-                    <div className="w-full h-full max-w-7xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
-                        {/* 닫기 버튼 오버레이 */}
-                        <div className="absolute top-4 right-4 z-10 flex gap-2">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-6 md:p-8 lg:p-12 animate-fade-in">
+                    <div className="w-full h-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
+                        {/* 닫기 버튼 오버레이 (iframe 위로 확실히 올라오도록 z-[100] 지정 및 위치 조정) */}
+                        <div className="absolute top-4 right-4 z-[100] flex items-center gap-2 pointer-events-auto">
                             <a
                                 href={viewerUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="bg-slate-800/80 hover:bg-black/90 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md flex items-center gap-2 px-4"
+                                className="bg-slate-800/90 hover:bg-black text-white px-4 py-2.5 rounded-full shadow-lg transition-all backdrop-blur-md flex items-center gap-2"
                                 title="새 창에서 열기"
                             >
                                 <ExternalLink size={18} />
@@ -195,7 +195,7 @@ const DrivePage = () => {
                             </a>
                             <button
                                 onClick={() => setViewerUrl(null)}
-                                className="bg-slate-800/80 hover:bg-rose-600 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md"
+                                className="bg-slate-800/90 hover:bg-rose-600 text-white p-2.5 rounded-full shadow-lg transition-all backdrop-blur-md"
                                 title="창 닫기"
                             >
                                 <X size={24} />
@@ -205,13 +205,13 @@ const DrivePage = () => {
                         {/* 뷰어 iframe 영역 */}
                         <div className="w-full h-full bg-slate-100 dark:bg-slate-800 relative flex items-center justify-center">
                             {/* 로딩 표시 (iframe 로드 전까지) */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center z-0 text-slate-400">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-0 text-slate-400 pointer-events-none">
                                 <Loader2 size={32} className="animate-spin text-blue-500 mb-2" />
                                 <p className="text-sm">문서를 불러오는 중입니다...</p>
                             </div>
                             <iframe
                                 src={viewerUrl}
-                                className="w-full h-full z-10 border-0"
+                                className="w-full h-full z-10 border-0 absolute inset-0"
                                 title="구글 문서 뷰어"
                                 allow="autoplay"
                             />
