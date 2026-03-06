@@ -8,6 +8,8 @@ import ManualsPage from './pages/ManualsPage';
 import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
 import MyPage from './pages/MyPage';
+import DrivePage from './pages/DrivePage';
+
 import ProtectedRoute from './components/ProtectedRoute';
 import NavBar from './components/NavBar';
 
@@ -34,7 +36,9 @@ function App() {
                         <Route path="/manuals" element={<ManualsPage />} />
                         <Route path="/manuals/:id" element={<ManualsPage />} />
                         <Route path="/tasks" element={<TasksPage />} />
+                        <Route path="/drive" element={<DrivePage />} />
                         <Route path="/admin" element={<AdminPage />} />
+
                         <Route path="/mypage" element={<MyPage />} />
                     </Route>
                 </Route>

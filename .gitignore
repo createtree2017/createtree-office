@@ -19,6 +19,7 @@ server/dist
 .env.test.local
 .env.production.local
 server/.env
+server/google-credentials.json
 
 # Debug
 npm-debug.log*
