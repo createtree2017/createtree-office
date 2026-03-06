@@ -6,12 +6,13 @@ import toast from 'react-hot-toast';
 const MyPage = () => {
     const navigate = useNavigate();
     const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
+    const [user, setUser] = useState(userStr ? JSON.parse(userStr) : null);
 
     const [currentPw, setCurrentPw] = useState('');
     const [newPw, setNewPw] = useState('');
     const [confirmPw, setConfirmPw] = useState('');
     const [loading, setLoading] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -42,6 +43,64 @@ const MyPage = () => {
         finally { setLoading(false); }
     };
 
+    const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // 용량 체크 (예: 5MB 이하)
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('이미지 파일은 5MB 이하만 가능합니다.');
+            return;
+        }
+
+        setUploadingImage(true);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = async () => {
+                // 1:1 크롭 및 리사이즈 (가로세로 200px)
+                const canvas = document.createElement('canvas');
+                const size = 200;
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+
+                if (ctx) {
+                    const minSize = Math.min(img.width, img.height);
+                    const startX = (img.width - minSize) / 2;
+                    const startY = (img.height - minSize) / 2;
+
+                    ctx.drawImage(img, startX, startY, minSize, minSize, 0, 0, size, size);
+                    const base64Image = canvas.toDataURL('image/jpeg', 0.85); // 품질 85%
+
+                    try {
+                        const response = await fetch('/api/auth/profile', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                            body: JSON.stringify({ thumbnail: base64Image }),
+                        });
+                        const result = await response.json();
+
+                        if (result.success) {
+                            toast.success('프로필 사진이 변경되었습니다.');
+                            // 현재 user state 및 localStorage 갱신
+                            const updatedUser = { ...user, thumbnail: result.data.thumbnail };
+                            setUser(updatedUser);
+                            localStorage.setItem('user', JSON.stringify(updatedUser));
+                        } else {
+                            toast.error(result.message || '사진 변경에 실패했습니다.');
+                        }
+                    } catch (err) {
+                        toast.error('프로필 사진 업로드 중 오류가 발생했습니다.');
+                    }
+                }
+                setUploadingImage(false);
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    };
+
     const getRoleBadge = (role: string) => {
         switch (role) {
             case 'ADMIN': return { label: '관리자', className: 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40' };
@@ -70,8 +129,23 @@ const MyPage = () => {
                 {/* 프로필 카드 */}
                 <div className="bento-card p-8 mb-6">
                     <div className="flex items-center gap-6 mb-8">
-                        <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-lg">
-                            {user?.name?.[0]?.toUpperCase() || 'U'}
+                        <div className="relative group">
+                            <label className="cursor-pointer block relative overflow-hidden rounded-2xl w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-black shadow-lg transition-transform hover:scale-105">
+                                {user?.thumbnail ? (
+                                    <img src={user.thumbnail} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    user?.name?.[0]?.toUpperCase() || 'U'
+                                )}
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-xs font-bold bg-black/60 px-2 py-1 rounded border border-white/20 whitespace-nowrap">사진 변경</span>
+                                </div>
+                                <input type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" disabled={uploadingImage} />
+                            </label>
+                            {uploadingImage && (
+                                <div className="absolute inset-0 bg-white/50 dark:bg-black/50 rounded-2xl flex items-center justify-center">
+                                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                            )}
                         </div>
                         <div className="flex-1">
                             <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-1">{user?.name}</h2>
