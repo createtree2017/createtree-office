@@ -30,7 +30,7 @@ const ManualEditor = ({ initialContent, googleFormId, onSave, editable }: Manual
 
     // GAS_URL은 사용자가 나중에 구성할 수 있도록 안내 필요
     // 여기서는 환경 변수나 고정된 문자열을 사용할 수 있음
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz8y4b4VED1HVkF1SzVi0FX0Z4LPSbJFgUiPHrFphxpNrw7mSlCb0bB0OFx2OSgwf0Hkw/exec';
+    const GAS_URL: string = 'https://script.google.com/macros/s/AKfycbz8y4b4VED1HVkF1SzVi0FX0Z4LPSbJFgUiPHrFphxpNrw7mSlCb0bB0OFx2OSgwf0Hkw/exec';
 
     const fetchGoogleForms = async () => {
         if (!editable || GAS_URL === 'YOUR_GAS_WEB_APP_URL') return;
