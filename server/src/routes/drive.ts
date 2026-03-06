@@ -12,9 +12,16 @@ router.get("/folders/:folderId", async (req, res) => {
         const { folderId } = req.params;
 
         // 환경 변수에 설정된 GOOGLE_APPLICATION_CREDENTIALS JSON 파일을 사용해 자동 인증
-        const auth = new google.auth.GoogleAuth({
+        // 혹은 Railway 배포 환경을 위해 직접 문자열로 주입받은 GOOGLE_CREDENTIALS_JSON 사용
+        let authOptions: any = {
             scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-        });
+        };
+
+        if (process.env.GOOGLE_CREDENTIALS_JSON) {
+            authOptions.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+        }
+
+        const auth = new google.auth.GoogleAuth(authOptions);
 
         const drive = google.drive({ version: 'v3', auth });
 
