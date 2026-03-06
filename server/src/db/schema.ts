@@ -1,14 +1,24 @@
 import { pgTable, serial, text, timestamp, boolean, pgEnum, integer, jsonb } from "drizzle-orm/pg-core";
 
-export const userRoleEnum = pgEnum("user_role", ["ADMIN", "MANAGER", "USER"]);
+export const userRoleEnum = pgEnum("user_role", ["ADMIN", "MANAGER", "HOSPITAL_ADMIN", "USER"]);
 export const taskStatusEnum = pgEnum("task_status", ["PENDING", "IN_PROGRESS", "ON_HOLD", "COMPLETED"]);
+
+export const clients = pgTable("clients", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    driveFolderId: text("drive_folder_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 export const users = pgTable("users", {
     id: serial("id").primaryKey(),
     email: text("email").notNull().unique(),
     password: text("password").notNull(),
     name: text("name").notNull(),
+    thumbnail: text("thumbnail"), // 프로필 이미지 용도 (Base64)
     role: userRoleEnum("role").default("USER").notNull(),
+    clientId: integer("client_id").references(() => clients.id),
     isApproved: boolean("is_approved").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

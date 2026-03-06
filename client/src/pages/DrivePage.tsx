@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft, X, Download } from 'lucide-react';
+import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft, X, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface DriveFile {
@@ -16,24 +16,52 @@ const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const DrivePage = () => {
     const [files, setFiles] = useState<DriveFile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [accessError, setAccessError] = useState<string | null>(null);
 
     // 모달 뷰어 상태
     const [viewerFile, setViewerFile] = useState<DriveFile | null>(null);
 
     // 폴더 탐색 기록 (스택 구조)
     const [folderStack, setFolderStack] = useState<{ id: string; name: string }[]>([
-        { id: '1SI_8POn6S3YqdEcrYIbFSzaU_r2fw5KI', name: '공유 자료실' }
+        { id: '1G-Wyp42A3OzmwxadzXsiyLIN_TrOFtYz', name: '거래처 폴더 (루트)' }
     ]);
+
+    // 검색 및 정렬 상태
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'name-asc' | 'name-desc'>('date-desc');
 
     const currentFolder = folderStack[folderStack.length - 1];
     const canGoBack = folderStack.length > 1;
 
+    // 검색어 디바운싱
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
     useEffect(() => {
         const fetchFiles = async () => {
             setIsLoading(true);
+            setAccessError(null);
             try {
-                const response = await fetch(`/api/drive/folders/${currentFolder.id}`);
+                const query = debouncedSearchQuery.trim();
+                const url = query
+                    ? `/api/drive/search?q=${encodeURIComponent(query)}`
+                    : `/api/drive/folders/${currentFolder.id}`;
+
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
                 const data = await response.json();
+
+                if (response.status === 403) {
+                    setAccessError(data.message || '접근 권한이 없습니다.');
+                    setFiles([]);
+                    return;
+                }
 
                 if (data.success) {
                     // 폴더를 먼저 보여주고 그 다음 파일들을 보여주도록 정렬
@@ -57,17 +85,23 @@ const DrivePage = () => {
         };
 
         fetchFiles();
-    }, [currentFolder.id]);
+    }, [currentFolder.id, debouncedSearchQuery]);
 
     const handleGoBack = () => {
         if (canGoBack) {
             setFolderStack(prev => prev.slice(0, -1));
+            setSearchQuery('');
+            setDebouncedSearchQuery('');
+            setSortBy('date-desc');
         }
     };
 
     const handleFolderClick = (file: DriveFile, e: React.MouseEvent) => {
         e.preventDefault();
         setFolderStack(prev => [...prev, { id: file.id, name: file.name }]);
+        setSearchQuery('');
+        setDebouncedSearchQuery('');
+        setSortBy('date-desc');
     };
 
     const handleFileClick = (file: DriveFile, e: React.MouseEvent) => {
@@ -95,6 +129,29 @@ const DrivePage = () => {
             minute: '2-digit'
         }).format(date);
     };
+
+    // 파일 로컬 검색 및 정렬 로직 (폴더는 무조건 최상단 유지)
+    const processedFiles = files
+        .filter(file => file.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) => {
+            const isAFolder = a.mimeType === FOLDER_MIME_TYPE;
+            const isBFolder = b.mimeType === FOLDER_MIME_TYPE;
+
+            // 폴더를 항상 상단에 배치
+            if (isAFolder && !isBFolder) return -1;
+            if (!isAFolder && isBFolder) return 1;
+
+            // 정렬 조건 적용
+            if (sortBy === 'name-asc') {
+                return a.name.localeCompare(b.name);
+            } else if (sortBy === 'name-desc') {
+                return b.name.localeCompare(a.name);
+            } else if (sortBy === 'date-asc') {
+                return new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime();
+            } else { // date-desc (기본값)
+                return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
+            }
+        });
 
     return (
         <div className="min-h-[100dvh] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] transition-colors duration-200">
@@ -126,10 +183,52 @@ const DrivePage = () => {
                     </div>
                 </div>
 
-                {isLoading ? (
+                {/* 검색 및 정렬 필터 컨트롤 바 (에러 없을 때만) */}
+                {!accessError && !isLoading && files.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center gap-3 mb-6 bg-slate-50 dark:bg-slate-800/30 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <div className="relative w-full sm:flex-1">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="text"
+                                placeholder="드라이브 전체 파일 검색 (이름)..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-slate-900 border shadow-sm border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-medium"
+                            />
+                        </div>
+                        <div className="flex w-full sm:w-auto shrink-0 relative">
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as any)}
+                                className="w-full sm:w-auto pl-4 pr-10 py-2.5 bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all cursor-pointer appearance-none"
+                            >
+                                <option value="date-desc">최신 등록순</option>
+                                <option value="date-asc">오래된 등록순</option>
+                                <option value="name-asc">이름 ⏶ (오름차순)</option>
+                                <option value="name-desc">이름 ⏷ (내림차순)</option>
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {accessError ? (
+                    <div className="flex flex-col items-center justify-center p-16 sm:p-24 bg-rose-50 dark:bg-rose-950/20 rounded-3xl border border-rose-200 dark:border-rose-900/50 shadow-sm mt-8 mx-4 sm:mx-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="w-20 h-20 bg-white dark:bg-rose-900/40 text-rose-500 rounded-full flex items-center justify-center mb-6 shadow-sm border border-rose-100 dark:border-rose-800">
+                            <X size={40} strokeWidth={2.5} />
+                        </div>
+                        <h3 className="text-2xl font-black text-rose-700 dark:text-rose-400 mb-4">{accessError}</h3>
+                        <p className="text-base text-rose-600/80 dark:text-rose-400/80 font-medium text-center leading-relaxed">
+                            아직 관리자로부터 서비스 이용 동기화 및 승인이 완료되지 않았습니다.<br className="hidden sm:block" />
+                            최초 가입 시 <strong className="font-bold text-rose-700 dark:text-rose-300">내부 검토 후 소속(거래처) 병원 전용 폴더가 자동 배정</strong>됩니다. 잠시 후 다시 시도해주세요.
+                        </p>
+                    </div>
+                ) : isLoading ? (
                     <div className="flex flex-col items-center justify-center p-20 gap-4 text-slate-400">
                         <Loader2 size={32} className="animate-spin text-blue-500" />
-                        <p className="text-sm font-medium">구글 드라이브에서 파일 목록을 가져오는 중...</p>
+                        <p className="text-sm font-medium">구글 드라이브에서 데이터 동기화 중...</p>
                     </div>
                 ) : files.length === 0 ? (
                     <div className="text-center p-20 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -137,9 +236,15 @@ const DrivePage = () => {
                         <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 mb-1">공유된 파일이 없습니다</h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400">이 폴더는 비어있습니다.</p>
                     </div>
+                ) : processedFiles.length === 0 ? (
+                    <div className="text-center p-20 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                        <Search size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                        <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 mb-1">검색 결과가 없습니다</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">다른 검색어를 입력해 보세요.</p>
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {files.map((file) => {
+                        {processedFiles.map((file) => {
                             const isFolder = file.mimeType === FOLDER_MIME_TYPE;
 
                             return (
@@ -149,10 +254,13 @@ const DrivePage = () => {
                                     target={isFolder ? '_self' : '_blank'}
                                     rel="noopener noreferrer"
                                     onClick={isFolder ? (e) => handleFolderClick(file, e) : (e) => handleFileClick(file, e)}
-                                    className="group flex flex-col bg-white dark:bg-[hsl(var(--card))] border border-slate-200 dark:border-[hsl(var(--border))] rounded-2xl p-5 shadow-sm hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-500/50 transition-all cursor-pointer"
+                                    className={`group flex flex-col rounded-2xl p-5 shadow-sm transition-all cursor-pointer border ${isFolder
+                                        ? 'bg-blue-50/60 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/40 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600'
+                                        : 'bg-white dark:bg-[hsl(var(--card))] border-slate-200 dark:border-[hsl(var(--border))] hover:shadow-xl hover:border-slate-300 dark:hover:border-slate-600'
+                                        }`}
                                 >
                                     <div className="flex items-start justify-between mb-4">
-                                        <div className={`p-3 rounded-xl transition-colors ${isFolder ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20'}`}>
+                                        <div className={`p-3 rounded-xl transition-colors ${isFolder ? 'bg-white dark:bg-blue-950/50 shadow-sm' : 'bg-slate-50 dark:bg-slate-800 group-hover:bg-slate-100 dark:group-hover:bg-slate-700'}`}>
                                             {getFileIcon(file.mimeType)}
                                         </div>
                                         {!isFolder && (
@@ -180,13 +288,38 @@ const DrivePage = () => {
 
                 {/* 문서 뷰어 모달 */}
                 {viewerFile && (() => {
+                    const mime = viewerFile.mimeType;
                     let viewerUrl = viewerFile.webViewLink;
-                    if (viewerUrl.includes('?')) {
-                        viewerUrl += '&rm=minimal&chrome=false';
+
+                    const isWorkspace = mime.startsWith('application/vnd.google-apps.');
+
+                    if (!isWorkspace) {
+                        // 일반 파일(이미지, PDF, ZIP, TXT 등)은 iframe 삽입을 위해 반드시 /preview 엔드포인트를 사용해야 함
+                        viewerUrl = `https://drive.google.com/file/d/${viewerFile.id}/preview`;
                     } else {
-                        viewerUrl += '?rm=minimal&chrome=false';
+                        // 구글 워크스페이스 문서(시트, 워드 등)는 기존처럼 webViewLink를 사용하되 상단바 숨김 파라미터 적용
+                        if (viewerUrl.includes('?')) {
+                            viewerUrl += '&rm=minimal&chrome=false';
+                        } else {
+                            viewerUrl += '?rm=minimal&chrome=false';
+                        }
                     }
-                    const downloadUrl = `https://drive.google.com/uc?export=download&id=${viewerFile.id}`;
+
+                    let downloadUrl: string | null = `https://drive.google.com/uc?export=download&id=${viewerFile.id}`;
+                    let downloadText = "다운로드";
+                    let ActionIcon = Download;
+
+                    // 구글 워크스페이스 문서 다운로드 처리 분기
+                    if (mime === 'application/vnd.google-apps.document') {
+                        downloadUrl = `https://docs.google.com/document/d/${viewerFile.id}/export?format=docx`;
+                    } else if (mime === 'application/vnd.google-apps.spreadsheet') {
+                        downloadUrl = `https://docs.google.com/spreadsheets/d/${viewerFile.id}/export?format=xlsx`;
+                    } else if (mime === 'application/vnd.google-apps.presentation') {
+                        downloadUrl = `https://docs.google.com/presentation/d/${viewerFile.id}/export/pptx`;
+                    } else if (mime.startsWith('application/vnd.google-apps.')) {
+                        // 구글 폼 등 내보내기가 불가능한 구글 문서는 다운로드/새창 버튼 아예 숨김
+                        downloadUrl = null;
+                    }
 
                     return (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 md:p-8 lg:p-10 animate-fade-in">
@@ -203,17 +336,21 @@ const DrivePage = () => {
                                     </div>
 
                                     <div className="flex items-center gap-3 shrink-0 ml-4">
-                                        <a
-                                            href={downloadUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition-colors border border-transparent hover:border-slate-300 dark:hover:border-slate-600"
-                                            title="파일 다운로드"
-                                        >
-                                            <Download size={16} />
-                                            <span className="hidden sm:inline">다운로드</span>
-                                        </a>
-                                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1"></div>
+                                        {downloadUrl && (
+                                            <>
+                                                <a
+                                                    href={downloadUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition-colors border border-transparent hover:border-slate-300 dark:hover:border-slate-600"
+                                                    title={downloadText}
+                                                >
+                                                    <ActionIcon size={16} />
+                                                    <span className="hidden sm:inline">{downloadText}</span>
+                                                </a>
+                                                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1"></div>
+                                            </>
+                                        )}
                                         <button
                                             onClick={() => setViewerFile(null)}
                                             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg transition-colors shadow-sm"

@@ -91,6 +91,7 @@ router.post("/login", async (req, res) => {
                     email: user.email,
                     name: user.name,
                     role: user.role,
+                    thumbnail: user.thumbnail,
                 }
             }
         });
@@ -106,6 +107,7 @@ router.get("/users", authenticateToken, async (req: AuthRequest, res) => {
             id: users.id,
             name: users.name,
             role: users.role,
+            thumbnail: users.thumbnail,
         }).from(users).where(eq(users.isApproved, true));
 
         res.json({ success: true, data: approvedUsers });
@@ -143,6 +145,44 @@ router.post("/change-password", authenticateToken, async (req: AuthRequest, res)
         res.json({ success: true, message: "비밀번호가 변경되었습니다." });
     } catch (error: any) {
         res.status(500).json({ success: false, message: "서버 오류가 발생했습니다.", error: error.message });
+    }
+});
+
+// 회원 프로필(썸네일 등) 수정
+router.patch("/profile", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const userId = req.user?.id;
+        const { thumbnail, name } = req.body;
+
+        if (!userId) return res.status(401).json({ success: false, message: "인증 정보가 없습니다." });
+
+        const updateData: any = {};
+        if (thumbnail !== undefined) updateData.thumbnail = thumbnail;
+        if (name !== undefined) updateData.name = name;
+
+        updateData.updatedAt = new Date();
+
+        const [updatedUser] = await db.update(users)
+            .set(updateData)
+            .where(eq(users.id, userId))
+            .returning();
+
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: "사용자를 찾을 수 없습니다." });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                id: updatedUser.id,
+                email: updatedUser.email,
+                name: updatedUser.name,
+                role: updatedUser.role,
+                thumbnail: updatedUser.thumbnail,
+            }
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: "프로필 수정 중 오류가 발생했습니다.", error: error.message });
     }
 });
 
