@@ -1,5 +1,6 @@
 import React from 'react';
 import { useModal } from '../contexts/ModalContext';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, User, Clock, Trash2, Edit3, X } from 'lucide-react';
 import CreateTaskModal from './CreateTaskModal';
 import toast from 'react-hot-toast';
@@ -13,6 +14,11 @@ interface Task {
     assigneeId: number;
     authorId: number;
     assigneeName: string;
+    templateId?: number | null;
+    templateTitle?: string | null;
+    clientId?: number | null;
+    clientName?: string | null;
+    driveFolderId?: string | null;
 }
 
 interface TaskDetailModalProps {
@@ -22,6 +28,7 @@ interface TaskDetailModalProps {
 
 const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
     const { openModal, closeModal } = useModal();
+    const navigate = useNavigate();
 
     const handleEdit = () => {
         openModal(<CreateTaskModal initialData={task} onSuccess={onSuccess} />);
@@ -127,6 +134,18 @@ const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
                         <Edit3 className="w-5 h-5" />
                         Edit Task
                     </button>
+                    {task.templateId && (
+                        <button
+                            onClick={() => {
+                                closeModal();
+                                navigate(`/tasks/${task.id}/response`);
+                            }}
+                            className="flex items-center gap-2 px-10 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl transition-all font-bold shadow-xl shadow-emerald-500/30 active:scale-95 ml-auto"
+                        >
+                            <Calendar className="w-5 h-5" />
+                            폼 작성하기
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

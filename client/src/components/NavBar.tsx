@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen } from 'lucide-react';
+import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // 다크모드 훅
@@ -58,7 +58,14 @@ const NavBar = () => {
         { path: '/tasks', label: '업무', icon: CheckSquare },
         { path: '/drive', label: '자료실', icon: FolderOpen },
 
-        ...(user?.role === 'ADMIN' ? [{ path: '/admin', label: '관리자', icon: Shield }] : []),
+        ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
+            { path: '/templates', label: '템플릿 관리', icon: LayoutTemplate },
+        ] : []),
+
+        ...(user?.role === 'ADMIN' ? [
+            { path: '/admin', label: '관리자', icon: Shield },
+            { onClick: () => window.open('https://drive.google.com/drive/my-drive', '_blank'), label: '관리자 드라이브', icon: FolderOpen, isButton: true, className: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm" }
+        ] : []),
     ];
 
     const getRoleBadge = (role: string) => {
@@ -88,8 +95,23 @@ const NavBar = () => {
 
             {/* 네비게이션 링크 */}
             <div className="flex items-center gap-1">
-                {navItems.map(({ path, label, icon: Icon }) => {
-                    const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+                {navItems.map((item, index) => {
+                    const { path, label, icon: Icon, isButton, onClick, className } = item as any;
+                    const isActive = path ? (location.pathname === path || (path !== '/' && location.pathname.startsWith(path))) : false;
+
+                    if (isButton) {
+                        return (
+                            <button
+                                key={`btn-${index}`}
+                                onClick={onClick}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${className || ''}`}
+                            >
+                                <Icon size={14} />
+                                <span className="hidden sm:block">{label}</span>
+                            </button>
+                        );
+                    }
+
                     return (
                         <button
                             key={path}

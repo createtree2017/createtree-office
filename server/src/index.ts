@@ -11,6 +11,8 @@ import tasksRouter from "./routes/tasks.js";
 import webhookRouter from "./routes/webhook.js";
 import driveRouter from "./routes/drive.js";
 import clientRouter from "./routes/client.js";
+import templatesRouter from "./routes/templates.js";
+import taskResponsesRouter from "./routes/taskResponses.js";
 
 dotenv.config();
 
@@ -27,6 +29,8 @@ app.use("/api/tasks", tasksRouter);
 app.use("/api/webhook", webhookRouter);
 app.use("/api/drive", driveRouter);
 app.use("/api/clients", clientRouter);
+app.use("/api/templates", templatesRouter);
+app.use("/api/task-responses", taskResponsesRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });

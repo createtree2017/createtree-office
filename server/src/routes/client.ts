@@ -41,7 +41,7 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) =
         const drive = google.drive({ version: 'v3', auth });
 
         // 생성할 최상위 부모 폴더 ID 지정 (기본값: '거래처 폴더' ID 반영)
-        const parentFolderId = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1G-Wyp42A3OzmwxadzXsiyLIN_TrOFtYz';
+        const parentFolderId = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1SI_8POn6S3YqdEcrYIbFSzaU_r2fw5KI';
 
         const fileMetadata = {
             name: name,
@@ -52,6 +52,7 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) =
         const driveResponse = await drive.files.create({
             requestBody: fileMetadata,
             fields: 'id',
+            supportsAllDrives: true
         });
 
         const driveFolderId = driveResponse.data.id;
@@ -140,7 +141,7 @@ router.post("/sync", authenticateToken, authorizeRole(["ADMIN"]), async (req, re
         const drive = google.drive({ version: 'v3', auth });
 
         // 생성할 최상위 부모 폴더 ID 지정 (기본값: '거래처 폴더' ID 반영)
-        const parentFolderId = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1G-Wyp42A3OzmwxadzXsiyLIN_TrOFtYz';
+        const parentFolderId = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1SI_8POn6S3YqdEcrYIbFSzaU_r2fw5KI';
 
         // 1. 구글 드라이브 내 해당 부모 폴더의 하위 폴더 목록 모두 가져오기
         const driveResponse = await drive.files.list({

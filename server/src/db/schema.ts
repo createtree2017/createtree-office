@@ -49,6 +49,9 @@ export const tasks = pgTable("tasks", {
     dueDate: timestamp("due_date"),
     assigneeId: integer("assignee_id").references(() => users.id),
     authorId: integer("author_id").references(() => users.id),
+    templateId: integer("template_id").references(() => taskTemplates.id),
+    clientId: integer("client_id").references(() => clients.id),
+    driveFolderId: text("drive_folder_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -59,4 +62,26 @@ export const formSubmissions = pgTable("form_submissions", {
     formId: text("form_id").notNull(),
     submittedData: jsonb("submitted_data").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const responseStatusEnum = pgEnum("response_status", ["DRAFT", "SUBMITTED"]);
+
+export const taskTemplates = pgTable("task_templates", {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    formSchema: jsonb("form_schema").notNull(), // 질문 항목 배열 (JSON)
+    authorId: integer("author_id").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const taskResponses = pgTable("task_responses", {
+    id: serial("id").primaryKey(),
+    taskId: integer("task_id").references(() => tasks.id).notNull(),
+    submitterId: integer("submitter_id").references(() => users.id),
+    responseData: jsonb("response_data").notNull(), // 임시저장 및 제출 데이터 (JSON)
+    status: responseStatusEnum("status").default("DRAFT").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
