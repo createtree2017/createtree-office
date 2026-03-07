@@ -17,6 +17,11 @@ interface Task {
     assigneeId: number;
     authorId: number;
     assigneeName: string;
+    templateId?: number | null;
+    templateTitle?: string | null;
+    clientId?: number | null;
+    clientName?: string | null;
+    driveFolderId?: string | null;
 }
 
 /* 상태별 스타일 정의 */
