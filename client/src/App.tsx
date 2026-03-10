@@ -11,6 +11,7 @@ import MyPage from './pages/MyPage';
 import DrivePage from './pages/DrivePage';
 import TemplatesPage from './pages/TemplatesPage';
 import TaskResponsePage from './pages/TaskResponsePage';
+import MonitoringPage from './pages/MonitoringPage';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import NavBar from './components/NavBar';
@@ -40,6 +41,7 @@ function App() {
                         <Route path="/tasks" element={<TasksPage />} />
                         <Route path="/tasks/:taskId/response" element={<TaskResponsePage />} />
                         <Route path="/drive" element={<DrivePage />} />
+                        <Route path="/monitoring" element={<MonitoringPage />} />
                         <Route path="/admin" element={<AdminPage />} />
                         <Route path="/templates" element={<TemplatesPage />} />
 
