@@ -61,7 +61,7 @@ class TelegramService {
                 ``,
                 ...sentimentLines,
                 sentimentLines.length ? `` : null,
-                `📋 [보고서 확인](http://localhost:5173/monitoring)`,
+                `📋 [보고서 확인](${process.env.APP_URL || "http://localhost:5173"}/monitoring)`,
             ].filter(v => v !== null).join("\n");
 
             const success = await this.sendMessage(client.telegramChatId, message);
