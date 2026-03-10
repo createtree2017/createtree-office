@@ -99,77 +99,90 @@ export class MonitoringService {
 
     private async processMonitoring(template: MonitoringTemplate, resultId: number): Promise<void> {
         const startTime = Date.now();
+        const isPlace = (template as any).templateType === 'place';
 
         try {
-            // Step 1: 수집
-            console.log(`🔍 수집 시작 - ${template.name}`);
-            const crawlOptions: CrawlOptions = {
-                searchType: template.searchType as "latest" | "accuracy",
-                dateRange: template.dateRange,
-                collectCount: template.collectCount,
-                scope: template.monitoringScope,
-            };
+            let posts: any[] = [];
 
-            let posts = await this.naverCollector.crawlSearch(template.keywords ?? [], crawlOptions);
-            console.log(`✅ API 수집 완료 - ${posts.length}개 게시글`);
+            if (isPlace) {
+                // ===== 플레이스 전용 처리 =====
+                console.log(`🏥 플레이스 모니터링 시작 - ${template.name}`);
+                const targetPlaces = (template as any).targetPlaces;
 
-            // Step 1.5: 콘텐츠 보강 크롤링 (crawlingMethod가 hybrid/unified일 때)
-            if (template.crawlingMethod !== 'api' && posts.length > 0) {
-                console.log(`🔄 콘텐츠 보강 크롤링 시작 (${template.crawlingMethod} 모드)`);
-                const maxCrawl = Math.min(posts.length, 20);
-                const toCrawl = posts.slice(0, maxCrawl);
-                const enriched = await this.contentCrawler.enrichPosts(toCrawl);
-                posts = [...enriched, ...posts.slice(maxCrawl)];
-                console.log(`✅ 콘텐츠 보강 완료 - ${enriched.length}개 보강됨`);
-            }
+                if (!targetPlaces || targetPlaces.length === 0) {
+                    console.warn('⚠️ targetPlaces가 비어있습니다.');
+                } else {
+                    try {
+                        for (const place of targetPlaces) {
+                            const placeId = this.extractPlaceId(place.url, place.platform);
+                            console.log(`🔍 플레이스 ID 추출: ${place.url} → ${placeId} (${place.platform})`);
+                            if (!placeId) { console.warn(`⚠️ 플레이스 ID 추출 실패: ${place.url}`); continue; }
 
-            // Step 1.6: 플레이스 리뷰 크롤링 (targetPlaces가 있을 때)
-            if (template.targetPlaces && template.targetPlaces.length > 0) {
-                console.log(`🏥 플레이스 크롤링 시작 - ${template.targetPlaces.length}개 플레이스`);
-                try {
-                    for (const place of template.targetPlaces) {
-                        const placeId = this.extractPlaceId(place.url, place.platform);
-                        if (!placeId) { console.warn(`⚠️ 플레이스 ID 추출 실패: ${place.url}`); continue; }
-
-                        let reviews: any[] = [];
-                        if (place.platform === 'naverplace') {
-                            reviews = await this.placeCrawler.crawlNaverPlace(placeId, template.collectCount);
-                        } else if (place.platform === 'kakaomap') {
-                            reviews = await this.placeCrawler.crawlKakaoMap(placeId, template.collectCount);
+                            let reviews: any[] = [];
+                            if (place.platform === 'naverplace') {
+                                reviews = await this.placeCrawler.crawlNaverPlace(placeId, template.collectCount);
+                            } else if (place.platform === 'kakaomap') {
+                                reviews = await this.placeCrawler.crawlKakaoMap(placeId, template.collectCount);
+                            }
+                            posts = [...posts, ...reviews];
+                            console.log(`✅ ${place.platform} 리뷰 ${reviews.length}개 수집`);
                         }
-                        posts = [...posts, ...reviews];
-                        console.log(`✅ ${place.platform} 리뷰 ${reviews.length}개 수집`);
+                    } catch (placeErr) {
+                        console.error('⚠️ 플레이스 크롤링 실패:', placeErr);
+                    } finally {
+                        await this.placeCrawler.close();
                     }
-                } catch (placeErr) {
-                    console.error('⚠️ 플레이스 크롤링 실패 (API 결과는 유지):', placeErr);
-                } finally {
-                    await this.placeCrawler.close();
                 }
-            }
+            } else {
+                // ===== 통합검색(integrated) 처리 =====
+                console.log(`🔍 통합검색 수집 시작 - ${template.name}`);
+                const crawlOptions: CrawlOptions = {
+                    searchType: template.searchType as "latest" | "accuracy",
+                    dateRange: template.dateRange,
+                    collectCount: template.collectCount,
+                    scope: template.monitoringScope,
+                };
 
-            // Step 1.7: 지정 카페 크롤링 (cafe_specific scope + targetCafes 있을 때)
-            if (template.monitoringScope.includes('cafe_specific') && template.targetCafes && template.targetCafes.length > 0) {
-                console.log(`☕ 지정 카페 크롤링 시작 - ${template.targetCafes.length}개 카페`);
-                try {
-                    for (const cafe of template.targetCafes) {
-                        const cafeId = this.extractCafeId(cafe.url);
-                        if (!cafeId) { console.warn(`⚠️ 카페 ID 추출 실패: ${cafe.url}`); continue; }
-                        // 네이버 카페 내 검색 API 활용
-                        for (const keyword of (template.keywords ?? [])) {
-                            const cafeSearchUrl = `https://openapi.naver.com/v1/search/cafearticle.json?query=${encodeURIComponent(keyword)}&display=${template.collectCount}&sort=date&filter=cafe_url:${cafeId}`;
-                            // API 기반이므로 naverCollector로 처리 (향후 확장)
+                posts = await this.naverCollector.crawlSearch(template.keywords ?? [], crawlOptions);
+                console.log(`✅ API 수집 완료 - ${posts.length}개 게시글`);
+
+                // 콘텐츠 보강 크롤링 (crawlingMethod가 hybrid일 때)
+                if (template.crawlingMethod !== 'api' && posts.length > 0) {
+                    console.log(`🔄 콘텐츠 보강 크롤링 시작 (${template.crawlingMethod} 모드)`);
+                    const maxCrawl = Math.min(posts.length, 20);
+                    const toCrawl = posts.slice(0, maxCrawl);
+                    const enriched = await this.contentCrawler.enrichPosts(toCrawl);
+                    posts = [...enriched, ...posts.slice(maxCrawl)];
+                    console.log(`✅ 콘텐츠 보강 완료 - ${enriched.length}개 보강됨`);
+                }
+
+                // 지정 카페 크롤링 (cafe_specific scope + targetCafes 있을 때)
+                const targetCafes = (template as any).targetCafes;
+                if (template.monitoringScope.includes('cafe_specific') && targetCafes && targetCafes.length > 0) {
+                    console.log(`☕ 지정 카페 크롤링 시작 - ${targetCafes.length}개 카페`);
+                    try {
+                        for (const cafe of targetCafes) {
+                            const cafeId = this.extractCafeId(cafe.url);
+                            if (!cafeId) { console.warn(`⚠️ 카페 ID 추출 실패: ${cafe.url}`); continue; }
+                            for (const keyword of (template.keywords ?? [])) {
+                                const cafeSearchUrl = `https://openapi.naver.com/v1/search/cafearticle.json?query=${encodeURIComponent(keyword)}&display=${template.collectCount}&sort=date&filter=cafe_url:${cafeId}`;
+                                // API 기반이므로 naverCollector로 처리 (향후 확장)
+                            }
                         }
+                    } catch (cafeErr) {
+                        console.error('⚠️ 지정 카페 크롤링 실패:', cafeErr);
                     }
-                } catch (cafeErr) {
-                    console.error('⚠️ 지정 카페 크롤링 실패:', cafeErr);
                 }
             }
 
             if (posts.length === 0) {
+                console.warn(`⚠️ 수집된 게시글 없음 - templateType: ${(template as any).templateType}`);
                 await db.update(monitoringResults).set({
                     status: "COMPLETED",
                     posts: [],
-                    summary: "수집된 게시글이 없습니다.",
+                    summary: isPlace
+                        ? "플레이스 리뷰 수집 결과가 없습니다. 플레이스 URL을 확인하세요."
+                        : "수집된 게시글이 없습니다.",
                     executionTimeMs: Date.now() - startTime,
                     updatedAt: new Date(),
                 }).where(eq(monitoringResults.id, resultId));
@@ -184,7 +197,6 @@ export class MonitoringService {
             // Step 3: 보고서 생성 및 드라이브 업로드
             let driveFileId: string | null = null;
             try {
-                // 거래처 정보 조회
                 const [client] = await db.select().from(clients).where(eq(clients.id, template.clientId));
                 if (client?.driveFolderId) {
                     driveFileId = await this.reportGenerator.generateAndUpload(template, posts, analysis, client);
@@ -220,18 +232,37 @@ export class MonitoringService {
         }
     }
 
+
     /** URL에서 플레이스 ID 추출 */
     private extractPlaceId(url: string, platform: string): string | null {
         try {
             if (platform === 'naverplace') {
-                // https://map.naver.com/p/entry/place/1234567 또는 https://m.place.naver.com/restaurant/1234567
-                const match = url.match(/(?:place|restaurant|hospital|beauty)\/(\d+)/);
-                return match ? match[1] : null;
+                // 패턴 1: https://map.naver.com/p/entry/place/13228
+                // 패턴 2: https://m.place.naver.com/restaurant/13228
+                // 패턴 3: https://map.naver.com/v5/entry/place/13228
+                const patterns = [
+                    /\/(?:place|entry\/place)\/(\d+)/,
+                    /(?:restaurant|hospital|beauty|cafe|hair)\/(\d+)/,
+                    /naver\.com.*?\/(\d{5,})/,
+                ];
+                for (const pat of patterns) {
+                    const match = url.match(pat);
+                    if (match) return match[1];
+                }
+                return null;
             }
             if (platform === 'kakaomap') {
-                // https://place.map.kakao.com/1234567
-                const match = url.match(/kakao\.com\/(\d+)/);
-                return match ? match[1] : null;
+                // 패턴 1: https://place.map.kakao.com/1234567
+                // 패턴 2: https://map.kakao.com/?itemId=1234567
+                const patterns = [
+                    /kakao\.com\/(\d+)/,
+                    /itemId=(\d+)/,
+                ];
+                for (const pat of patterns) {
+                    const match = url.match(pat);
+                    if (match) return match[1];
+                }
+                return null;
             }
             return null;
         } catch { return null; }
@@ -240,9 +271,9 @@ export class MonitoringService {
     /** URL에서 카페 ID 추출 */
     private extractCafeId(url: string): string | null {
         try {
-            // https://cafe.naver.com/cafename
             const match = url.match(/cafe\.naver\.com\/([a-zA-Z0-9_-]+)/);
             return match ? match[1] : null;
         } catch { return null; }
     }
 }
+
