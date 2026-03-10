@@ -19,6 +19,7 @@ export class PlaceCrawler {
         console.log(`🔍 네이버 플레이스 리뷰 수집: placeId=${placeId}, max=${maxReviews}`);
 
         const allPosts: PostData[] = [];
+        const collectedIds = new Set<string>();  // 중복 방지
         const pageSize = Math.min(maxReviews, 100);
         let page = 1;
 
@@ -51,6 +52,7 @@ export class PlaceCrawler {
                                     author { nickname }
                                     body
                                     created
+                                    visitedDate
                                     visitCount
                                 }
                                 total
@@ -76,26 +78,30 @@ export class PlaceCrawler {
 
                 if (items.length === 0) break;
 
+                let addedThisPage = 0;
                 for (const r of items) {
                     if (allPosts.length >= maxReviews) break;
+                    const postId = `nplace_${placeId}_${r.id || allPosts.length}`;
+                    if (collectedIds.has(postId)) continue;  // 중복 스킵
+                    collectedIds.add(postId);
+
                     const body = (r.body || "").trim();
-                    if (!body || body.length < 3) continue;
                     allPosts.push({
-                        id: `nplace_${placeId}_${r.id || allPosts.length}`,
+                        id: postId,
                         title: `네이버 플레이스 리뷰${r.rating ? ` ⭐${r.rating}` : ""}`,
-                        content: body,
+                        content: body,  // 이미지 전용은 빈 문자열
                         author: r.author?.nickname || "익명",
-                        publishedAt: r.created
-                            ? new Date(r.created).toLocaleDateString("ko-KR")
-                            : new Date().toLocaleDateString("ko-KR"),
+                        publishedAt: this.parseDate(r.created),
+                        visitedAt: r.visitedDate ? this.parseDate(r.visitedDate) : undefined,
                         url: `https://map.naver.com/p/entry/place/${placeId}`,
                         platform: "naver",
                         source: "naverplace",
                     });
+                    addedThisPage++;
                 }
 
                 // 더 이상 가져올 데이터 없으면 중단
-                if (items.length < pageSize || allPosts.length >= total) break;
+                if (items.length < pageSize || allPosts.length >= total || addedThisPage === 0) break;
                 page++;
                 await this.delay(500); // rate limit 방지
             }
@@ -201,6 +207,20 @@ export class PlaceCrawler {
     // 키워드 기반 (미사용, 인터페이스 호환용)
     async crawlPlacesByKeyword(keywords: string[], scope: string[], maxReviews: number = 20): Promise<PostData[]> {
         return [];
+    }
+
+    private parseDate(raw: any): string {
+        if (!raw) return new Date().toLocaleDateString("ko-KR");
+        const num = Number(raw);
+        if (!isNaN(num) && num > 1000000000) {
+            const ms = num < 10000000000 ? num * 1000 : num;
+            return new Date(ms).toLocaleDateString("ko-KR");
+        }
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString("ko-KR");
+        const match = String(raw).match(/(\d{4})[.\-](\d{1,2})[.\-](\d{1,2})/);
+        if (match) return match[1] + ". " + parseInt(match[2]) + ". " + parseInt(match[3]) + ".";
+        return String(raw);
     }
 
     private delay(ms: number): Promise<void> {

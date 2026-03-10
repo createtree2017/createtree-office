@@ -1,6 +1,6 @@
 import { db } from "../../db/index.js";
 import { monitoringTemplates, monitoringResults, clients } from "../../db/schema.js";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { NaverCollector } from "./naverCollector.js";
 import { ContentCrawler } from "./contentCrawler.js";
 import { PlaceCrawler } from "./placeCrawler.js";
@@ -73,6 +73,10 @@ export class MonitoringService {
     async getResult(id: number) {
         const [result] = await db.select().from(monitoringResults).where(eq(monitoringResults.id, id));
         return result || null;
+    }
+
+    async deleteResults(ids: number[]) {
+        await db.delete(monitoringResults).where(inArray(monitoringResults.id, ids));
     }
 
     // ===== 모니터링 실행 =====

@@ -47,13 +47,18 @@ export class SchedulerService {
         const task = cron.schedule(cronExpression, async () => {
             console.log(`🔄 [스케줄] 자동 실행: 템플릿 #${templateId} (${new Date().toLocaleString("ko-KR")})`);
             try {
-                if (this.monitoringService) {
-                    await this.monitoringService.executeMonitoring(templateId, 0); // system user
-                    // 마지막 실행 시간 업데이트
-                    await db.update(monitoringTemplates)
-                        .set({ scheduleLastRunAt: new Date() })
-                        .where(eq(monitoringTemplates.id, templateId));
+                // monitoringService가 없으면 동적으로 가져오기
+                if (!this.monitoringService) {
+                    console.log(`⚠️ [스케줄] monitoringService 미설정, 동적 생성 중...`);
+                    const { MonitoringService } = await import("./monitoringService.js");
+                    this.monitoringService = new MonitoringService();
                 }
+                await this.monitoringService.executeMonitoring(templateId, 0); // system user
+                // 마지막 실행 시간 업데이트
+                await db.update(monitoringTemplates)
+                    .set({ scheduleLastRunAt: new Date() })
+                    .where(eq(monitoringTemplates.id, templateId));
+                console.log(`✅ [스케줄] 자동 실행 완료: 템플릿 #${templateId}`);
             } catch (error) {
                 console.error(`❌ [스케줄] 자동 실행 실패: 템플릿 #${templateId}`, error);
             }

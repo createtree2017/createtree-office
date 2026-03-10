@@ -139,7 +139,18 @@ export class ReportGenerator {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Pretendard','-apple-system','Noto Sans KR',sans-serif;background:#f5f7fa;color:#1a1a2e;line-height:1.6}
-.container{max-width:960px;margin:0 auto;padding:24px}
+.container{max-width:1400px;margin:0 auto;padding:24px}
+.posts-table{table-layout:fixed;width:100%}
+.posts-table th:nth-child(1){width:44px}
+.posts-table th:nth-child(2){width:140px}
+.posts-table th:nth-child(3){width:auto}
+.posts-table th:nth-child(4),.posts-table td:nth-child(4){width:72px;text-align:center}
+.posts-table th:nth-child(5),.posts-table td:nth-child(5){width:110px;text-align:center}
+.posts-table th:nth-child(6),.posts-table td:nth-child(6){width:130px;text-align:center}
+.posts-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.posts-table td:nth-child(3){white-space:normal}
+.date-visited{font-weight:600;font-size:12px;color:#1a1a2e}
+.date-created{font-size:11px;color:#94a3b8;margin-top:2px}
 .header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:40px 32px;border-radius:16px;margin-bottom:24px}
 .header h1{font-size:24px;font-weight:700;margin-bottom:8px}
 .header .meta{font-size:14px;opacity:0.85}
@@ -169,7 +180,10 @@ body{font-family:'Pretendard','-apple-system','Noto Sans KR',sans-serif;backgrou
 .posts-table th{background:#f1f5f9;padding:10px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e2e8f0}
 .posts-table td{padding:10px 12px;border-bottom:1px solid #f1f5f9}
 .posts-table tr:hover{background:#f8fafc}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.preview-text{color:#64748b;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;cursor:pointer}
+.preview-text:hover{color:#4f46e5}
+.preview-text.expanded{white-space:normal;overflow:visible;text-overflow:unset;color:#334155}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
 .badge.positive{background:#dcfce7;color:#16a34a}
 .badge.neutral{background:#fef9c3;color:#a16207}
 .badge.negative{background:#fee2e2;color:#dc2626}
@@ -179,6 +193,17 @@ body{font-family:'Pretendard','-apple-system','Noto Sans KR',sans-serif;backgrou
 a{color:#667eea;text-decoration:none}
 a:hover{text-decoration:underline}
 </style>
+<script>
+function togglePreview(el) {
+  el.classList.toggle('expanded');
+  if (el.classList.contains('expanded')) {
+    el.textContent = el.dataset.full;
+  } else {
+    var t = el.dataset.full;
+    el.textContent = t.length > 50 ? t.substring(0, 50) + '...' : t;
+  }
+}
+</script>
 </head>
 <body>
 <div class="container">
@@ -214,14 +239,20 @@ a:hover{text-decoration:underline}
     <div class="card">
         <h2>📋 수집 게시글 (${posts.length}건)</h2>
         <table class="posts-table">
-            <thead><tr><th>#</th><th>제목</th><th>감성</th><th>출처</th><th>날짜</th></tr></thead>
+            <thead><tr><th>#</th><th>작성자(ID)</th><th>내용 미리보기</th><th>감성</th><th>출처</th><th>날짜</th></tr></thead>
             <tbody>
 ${posts.slice(0, 50).map((p, i) => `                <tr>
                     <td>${i + 1}</td>
-                    <td><a href="${p.url}" target="_blank">${this.escapeHtml(p.title.substring(0, 60))}${p.title.length > 60 ? "..." : ""}</a></td>
+                    <td><a href="${p.url}" target="_blank">${this.escapeHtml(p.author || "익명")}</a></td>
+                    <td><span class="preview-text" data-full="${this.escapeHtml(p.content || "")}" onclick="togglePreview(this)">${this.escapeHtml((p.content || "").substring(0, 50))}${(p.content || "").length > 50 ? "..." : ""}</span></td>
                     <td><span class="badge ${p.sentiment || "neutral"}">${this.sentimentLabel(p.sentiment)}</span></td>
                     <td>${p.source || p.platform}</td>
-                    <td>${p.publishedAt}</td>
+                    <td>
+                        ${p.visitedAt
+                ? `<div class="date-visited">🗓 ${this.formatDate(p.visitedAt)}</div><div class="date-created">작성: ${this.formatDate(p.publishedAt)}</div>`
+                : `<div class="date-visited">${this.formatDate(p.publishedAt)}</div>`
+            }
+                    </td>
                 </tr>`).join("\n")}
             </tbody>
         </table>
@@ -232,6 +263,15 @@ ${posts.slice(0, 50).map((p, i) => `                <tr>
 </div>
 </body>
 </html>`;
+    }
+
+    private formatDate(raw?: string): string {
+        if (!raw || raw === "Invalid Date") return "날짜 미상";
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" });
+        }
+        return raw;
     }
 
     private sentimentLabel(s?: string): string {

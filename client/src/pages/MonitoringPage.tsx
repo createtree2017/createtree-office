@@ -24,6 +24,7 @@ const MonitoringPage = () => {
     const [selectedResult, setSelectedResult] = useState<Result | null>(null);
     const [reportHtml, setReportHtml] = useState<string | null>(null);
     const [executing, setExecuting] = useState<Set<number>>(new Set());
+    const [selectedResultIds, setSelectedResultIds] = useState<Set<number>>(new Set());
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -60,6 +61,13 @@ const MonitoringPage = () => {
         }, 5000);
         return () => clearInterval(interval);
     }, [results]);
+
+    // 결과 목록 탭에서 30초마다 자동 새로고침 (스케줄 실행 결과 반영)
+    useEffect(() => {
+        if (tab !== 'results') return;
+        const interval = setInterval(() => { fetchData(); }, 30000);
+        return () => clearInterval(interval);
+    }, [tab, fetchData]);
 
     const executeMonitoring = async (templateId: number) => {
         setExecuting(prev => new Set(prev).add(templateId));
@@ -104,6 +112,31 @@ const MonitoringPage = () => {
     };
 
     // ★ 수정: 앱 내부 모달로 HTML 보고서 표시
+    const deleteResults = async () => {
+        if (selectedResultIds.size === 0) return toast.error('삭제할 항목을 선택해주세요.');
+        if (!confirm(`선택한 ${selectedResultIds.size}건을 삭제하시겠습니까?`)) return;
+        try {
+            const res = await fetch(`${API}/results`, { method: 'DELETE', headers: getHeaders(), body: JSON.stringify({ ids: Array.from(selectedResultIds) }) });
+            const data = await res.json();
+            if (data.success) { toast.success(data.message); setSelectedResultIds(new Set()); fetchData(); }
+            else toast.error(data.message);
+        } catch { toast.error('삭제 실패'); }
+    };
+
+    const toggleResultSelect = (id: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedResultIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedResultIds.size === results.length) setSelectedResultIds(new Set());
+        else setSelectedResultIds(new Set(results.map(r => r.id)));
+    };
+
     const viewReportInModal = async (resultId: number) => {
         try {
             const res = await fetch(`${API}/results/${resultId}/report`, { headers: getAuthOnly() });
@@ -297,6 +330,19 @@ const MonitoringPage = () => {
                 {/* ========== 결과 목록 탭 ========== */}
                 {tab === 'results' && (
                     <div className="space-y-3">
+                        {results.length > 0 && (
+                            <div className="flex items-center justify-between bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] px-5 py-3">
+                                <label className="flex items-center gap-2 cursor-pointer text-sm text-[hsl(var(--muted-foreground))]">
+                                    <input type="checkbox" checked={selectedResultIds.size === results.length && results.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded accent-violet-600" />
+                                    전체 선택 ({selectedResultIds.size}/{results.length})
+                                </label>
+                                {selectedResultIds.size > 0 && (
+                                    <button onClick={deleteResults} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors">
+                                        <Trash2 size={14} /> {selectedResultIds.size}건 삭제
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         {results.length === 0 && (
                             <div className="text-center py-16 bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))]">
                                 <FileText size={40} className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]" />
@@ -306,8 +352,9 @@ const MonitoringPage = () => {
                         {results.map(r => {
                             const tpl = templates.find(t => t.id === r.templateId);
                             return (
-                                <div key={r.id} onClick={() => r.status === 'COMPLETED' && setSelectedResult(r)} className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === 'COMPLETED' ? 'cursor-pointer hover:border-violet-300 dark:hover:border-violet-700' : ''} transition-colors`}>
+                                <div key={r.id} onClick={() => r.status === 'COMPLETED' && setSelectedResult(r)} className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === 'COMPLETED' ? 'cursor-pointer hover:border-violet-300 dark:hover:border-violet-700' : ''} ${selectedResultIds.has(r.id) ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-900/10' : ''} transition-colors`}>
                                     <div className="flex items-center gap-3">
+                                        <input type="checkbox" checked={selectedResultIds.has(r.id)} onClick={(e) => toggleResultSelect(r.id, e)} onChange={() => { }} className="w-4 h-4 rounded accent-violet-600 shrink-0" />
                                         {getSentimentIcon(r.statistics?.overall_sentiment)}
                                         <div>
                                             <p className="font-semibold text-sm text-[hsl(var(--foreground))]">{tpl?.name || `#${r.templateId}`}</p>
@@ -403,8 +450,8 @@ const MonitoringPage = () => {
 
             {/* ========== HTML 보고서 모달 ========== */}
             {reportHtml && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setReportHtml(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-[3vh]" onClick={() => setReportHtml(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full h-full flex flex-col" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-6 py-3 border-b">
                             <h2 className="font-bold text-gray-900">📊 HTML 보고서</h2>
                             <div className="flex gap-2">
@@ -412,7 +459,7 @@ const MonitoringPage = () => {
                                 <button onClick={() => setReportHtml(null)} className="p-1.5 text-gray-400 hover:text-gray-700"><X size={20} /></button>
                             </div>
                         </div>
-                        <iframe srcDoc={reportHtml} className="flex-1 w-full border-0 rounded-b-2xl" title="모니터링 보고서" sandbox="allow-same-origin" />
+                        <iframe srcDoc={reportHtml} className="flex-1 w-full border-0 rounded-b-2xl" title="모니터링 보고서" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-scripts" />
                     </div>
                 </div>
             )}
@@ -467,7 +514,7 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                 name, templateType, clientId: parseInt(clientId),
                 collectCount: Math.min(collectCount, templateType === 'place' ? 100 : 50),
                 isActive, scheduleEnabled,
-                scheduleCron: scheduleEnabled ? `0 ${scheduleHour} * * *` : null,
+                scheduleCron: scheduleEnabled ? (scheduleHour === -1 ? '*/2 * * * *' : `0 ${scheduleHour} * * *`) : null,
             };
             if (templateType === 'integrated') {
                 body.keywords = keywordsStr.split(',').map((k: string) => k.trim()).filter(Boolean);
@@ -652,9 +699,10 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                             <div className="mt-3">
                                 <label className="block text-xs text-[hsl(var(--muted-foreground))] mb-1">매일 실행 시간</label>
                                 <select value={scheduleHour} onChange={e => setScheduleHour(parseInt(e.target.value))} className={inputCls}>
+                                    <option value={-1}>⚡ 2분마다 (테스트)</option>
                                     {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
                                 </select>
-                                <p className="text-xs text-violet-600 mt-1">{`매일 ${String(scheduleHour).padStart(2, '0')}:00에 자동 실행됩니다`}</p>
+                                <p className="text-xs text-violet-600 mt-1">{scheduleHour === -1 ? '⚡ 2분마다 자동 실행됩니다 (테스트용)' : `매일 ${String(scheduleHour).padStart(2, '0')}:00에 자동 실행됩니다`}</p>
                             </div>
                         )}
                     </div>

@@ -193,4 +193,19 @@ router.get("/results/:id/report", authenticateToken, async (req: AuthRequest, re
     }
 });
 
+// 결과 삭제 (다건)
+router.delete("/results", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req: AuthRequest, res) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: "삭제할 결과 ID를 선택해주세요." });
+        }
+        await monitoringService.deleteResults(ids);
+        res.json({ success: true, message: `${ids.length}건이 삭제되었습니다.` });
+    } catch (error: any) {
+        console.error("결과 삭제 오류:", error);
+        res.status(500).json({ success: false, message: "결과 삭제 실패" });
+    }
+});
+
 export default router;

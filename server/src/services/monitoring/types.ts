@@ -6,7 +6,8 @@ export interface PostData {
     title: string;
     content: string;
     author: string;
-    publishedAt: string;
+    publishedAt: string;   // 리뷰 작성일 (created)
+    visitedAt?: string;    // 방문일 (visitedDate) - 플레이스 전용
     url: string;
     platform: "naver" | "google" | "daum" | "kakao";
     source?: "blog" | "cafe" | "cafe_specific" | "news" | "place" | "naverplace" | "kakaomap";
