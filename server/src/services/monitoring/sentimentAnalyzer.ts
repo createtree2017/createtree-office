@@ -4,7 +4,7 @@ import { SENTIMENT_KEYWORDS } from "./types.js";
 
 /**
  * AI 감성 분석기
- * CMP MonitoringAnalyzer를 Gemini 2.5 Flash 기반으로 리팩토링
+ * 전체 게시글을 1회 Gemini 호출로 종합 분석
  */
 export class SentimentAnalyzer {
     private gemini: GoogleGenAI;
@@ -28,47 +28,93 @@ export class SentimentAnalyzer {
         return this.fallbackAnalysis(posts, template);
     }
 
+    /**
+     * Gemini 1회 호출로 전체 게시글 종합 분석
+     * - 각 게시글 감성 판정 (긍정/중립/부정)
+     * - 종합 서술식 의견
+     */
     private async geminiAnalysis(posts: PostData[], template: MonitoringTemplate): Promise<AnalysisResult> {
+        // 게시글 데이터를 프롬프트용 텍스트로 변환
+        const postsText = posts.map((p, i) => {
+            const content = (p.content || "").trim();
+            return `[${i + 1}] 작성자: ${p.author} | 내용: ${content || "(이미지 전용 리뷰, 텍스트 없음)"}`;
+        }).join("\n");
+
+        const prompt = `당신은 온라인 평판 모니터링 전문 분석가입니다.
+아래는 "${template.name}"에 대한 총 ${posts.length}개의 리뷰/게시글입니다.
+
+===== 게시글 목록 =====
+${postsText}
+========================
+
+다음 JSON 형식으로 종합 분석 결과를 응답해주세요:
+{
+  "sentiments": [
+    {"index": 1, "sentiment": "positive|neutral|negative", "confidence": 0.0-1.0},
+    {"index": 2, "sentiment": "positive|neutral|negative", "confidence": 0.0-1.0}
+  ],
+  "key_topics": ["주요 토픽1", "주요 토픽2", "주요 토픽3"],
+  "positive_points": ["긍정적 요소1", "긍정적 요소2"],
+  "improvement_areas": ["개선이 필요한 점1", "개선이 필요한 점2"],
+  "summary": "여기에 전문 분석가의 관점에서 종합 의견을 서술식으로 작성 (200~400자). 수집된 리뷰의 전반적인 경향, 특징적인 패턴, 주목할 만한 점, 그리고 비즈니스 관점에서의 시사점을 포함해주세요."
+}
+
+분석 시 주의사항:
+- 전체 맥락과 뉘앙스를 고려하여 감성을 판단하세요
+- 이미지 전용 리뷰(텍스트 없음)는 "neutral"로 처리하세요
+- summary는 반드시 서술식 문장으로 전문가 보고서 톤으로 작성하세요
+- 모니터링 키워드: ${(template.keywords ?? []).join(", ") || "없음"}`;
+
+        console.log(`📊 Gemini 종합 분석 호출 중 (${posts.length}개 게시글)...`);
+
+        let result: any = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const response = await this.gemini.models.generateContent({
+                    model: "gemini-2.5-flash",
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    config: {
+                        temperature: 0.4,
+                        maxOutputTokens: 65536,
+                        responseMimeType: "application/json",
+                    },
+                });
+                result = JSON.parse(response.text || "{}");
+                console.log(`✅ Gemini 종합 분석 완료 (시도 ${attempt})`);
+                break;
+            } catch (parseErr) {
+                console.error(`⚠️ Gemini 응답 JSON 파싱 실패 (시도 ${attempt}/2):`, parseErr);
+                if (attempt === 2) throw parseErr;
+                await new Promise(r => setTimeout(r, 1000));  // 1초 대기 후 재시도
+            }
+        }
+
+        // 개별 감성 결과를 posts에 반영
         const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
-        const keyTopics = new Set<string>();
-        const positivePoints: string[] = [];
-        const improvementAreas: string[] = [];
-        const analyzedPosts: any[] = [];
 
-        // 배치 분석 (5개씩)
-        const batchSize = 5;
-        for (let i = 0; i < posts.length; i += batchSize) {
-            const batch = posts.slice(i, i + batchSize);
-            console.log(`📊 Gemini 배치 ${Math.floor(i / batchSize) + 1}/${Math.ceil(posts.length / batchSize)} 처리중...`);
-
-            for (const post of batch) {
-                try {
-                    const analysis = await this.analyzeOnePost(post, template);
-
-                    if (analysis.sentiment === "positive") sentimentCounts.positive++;
-                    else if (analysis.sentiment === "negative") sentimentCounts.negative++;
-                    else sentimentCounts.neutral++;
-
-                    if (analysis.keyTopics) analysis.keyTopics.forEach((t: string) => keyTopics.add(t));
-                    if (analysis.positiveAspects) positivePoints.push(...analysis.positiveAspects);
-                    if (analysis.improvementAreas) improvementAreas.push(...analysis.improvementAreas);
-
-                    post.sentiment = analysis.sentiment;
-                    post.sentimentScore = analysis.confidence;
-                    analyzedPosts.push({ ...post, gptAnalysis: analysis });
-                } catch {
-                    // 개별 실패 시 키워드 기반 fallback
-                    const fallback = this.analyzeSinglePostKeywords(post);
-                    sentimentCounts[fallback]++;
-                    post.sentiment = fallback;
-                    post.sentimentScore = 0.5;
-                    analyzedPosts.push({ ...post });
+        if (result.sentiments && Array.isArray(result.sentiments)) {
+            for (const s of result.sentiments) {
+                const idx = s.index - 1;
+                if (idx >= 0 && idx < posts.length) {
+                    const sentiment = s.sentiment as "positive" | "neutral" | "negative";
+                    posts[idx].sentiment = sentiment;
+                    posts[idx].sentimentScore = s.confidence || 0.5;
+                    sentimentCounts[sentiment]++;
                 }
             }
         }
 
+        // 감성 미할당 게시글 처리 (JSON 파싱 누락 시)
+        for (const post of posts) {
+            if (!post.sentiment) {
+                const fallback = this.analyzeSinglePostKeywords(post);
+                post.sentiment = fallback;
+                post.sentimentScore = 0.5;
+                sentimentCounts[fallback]++;
+            }
+        }
+
         const total = posts.length;
-        const summary = await this.generateSummary(analyzedPosts, sentimentCounts, total, Array.from(keyTopics), positivePoints, improvementAreas, template);
 
         return {
             overall_sentiment: this.getDominant(sentimentCounts),
@@ -83,68 +129,16 @@ export class SentimentAnalyzer {
                     negative: total > 0 ? Math.round((sentimentCounts.negative / total) * 100) : 0,
                 },
             },
-            key_topics: Array.from(keyTopics).slice(0, 10),
-            positive_points: positivePoints.slice(0, 10),
-            improvement_areas: improvementAreas.slice(0, 10),
-            summary,
+            key_topics: (result.key_topics || []).slice(0, 10),
+            positive_points: (result.positive_points || []).slice(0, 10),
+            improvement_areas: (result.improvement_areas || []).slice(0, 10),
+            summary: result.summary || this.fallbackSummary(sentimentCounts, total, template),
             analysis_method: "gemini",
             processing_stats: { total_posts: total, processed_posts: total },
-            analyzed_posts: analyzedPosts,
         };
     }
 
-    private async analyzeOnePost(post: PostData, template: MonitoringTemplate) {
-        const systemPrompt = `당신은 온라인 평판 분석 전문가입니다. 주어진 게시글을 분석하여 다음 JSON 형식으로 응답해주세요:
-{
-  "sentiment": "positive|neutral|negative",
-  "confidence": 0.0-1.0,
-  "keyTopics": ["주제1", "주제2"],
-  "positiveAspects": ["긍정요소"],
-  "improvementAreas": ["개선점"],
-  "summary": "한줄 요약",
-  "reasoning": "감정 분석 근거"
-}
-분석 시 전체 맥락과 의도로 감정을 판단하세요.`;
-
-        const userPrompt = `제목: ${post.title}\n내용: ${post.content}\n분석 대상 키워드: ${(template.keywords ?? []).join(", ")}`;
-
-        const response = await this.gemini.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }],
-            config: {
-                temperature: 0.3,
-                maxOutputTokens: 800,
-                responseMimeType: "application/json",
-            },
-        });
-
-        return JSON.parse(response.text || "{}");
-    }
-
-    private async generateSummary(
-        posts: any[], counts: { positive: number; neutral: number; negative: number },
-        total: number, topics: string[], positives: string[], improvements: string[],
-        template: MonitoringTemplate
-    ): Promise<string> {
-        try {
-            const prompt = `다음 모니터링 분석 데이터를 바탕으로 한국어로 종합 요약을 150자 내외로 작성하세요.
-대상: ${template.name}
-총 게시글: ${total}개 (긍정 ${counts.positive}, 중립 ${counts.neutral}, 부정 ${counts.negative})
-주요 토픽: ${topics.join(", ")}
-긍정 요소: ${positives.slice(0, 5).join(", ")}
-개선 필요: ${improvements.slice(0, 5).join(", ")}`;
-
-            const response = await this.gemini.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                config: { temperature: 0.7, maxOutputTokens: 300 },
-            });
-
-            return response.text?.trim() || this.fallbackSummary(counts, total, template);
-        } catch {
-            return this.fallbackSummary(counts, total, template);
-        }
-    }
+    // ===== Fallback (키워드 기반 분석) =====
 
     private fallbackSummary(counts: { positive: number; neutral: number; negative: number }, total: number, template: MonitoringTemplate): string {
         const dominant = this.getDominant(counts);
