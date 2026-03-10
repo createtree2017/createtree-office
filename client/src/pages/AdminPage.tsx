@@ -16,6 +16,9 @@ interface Client {
     id: number;
     name: string;
     driveFolderId?: string;
+    telegramChatId?: string | null;
+    telegramInviteCode?: string | null;
+    telegramConnectedAt?: string | null;
 }
 
 const AdminPage = () => {
@@ -137,6 +140,42 @@ const AdminPage = () => {
             }
         } catch (err) {
             toast.error('수정 중 네트워크 오류가 발생했습니다.');
+        }
+    };
+
+    const handleTelegramInvite = async (clientId: number) => {
+        try {
+            const response = await fetch(`/api/notification/telegram/invite/${clientId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const result = await response.json();
+            if (result.success) {
+                await navigator.clipboard.writeText(result.data.inviteUrl);
+                toast.success('Telegram 초대 링크가 클립보드에 복사되었습니다!');
+                fetchClients();
+            } else {
+                toast.error(result.message || '초대 링크 생성 실패');
+            }
+        } catch (err) {
+            toast.error('초대 링크 생성 중 오류');
+        }
+    };
+
+    const handleTelegramDisconnect = async (clientId: number) => {
+        if (!window.confirm('Telegram 연동을 해제하시겠습니까?')) return;
+        try {
+            const response = await fetch(`/api/notification/telegram/${clientId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const result = await response.json();
+            if (result.success) {
+                toast.success('Telegram 연동이 해제되었습니다.');
+                fetchClients();
+            }
+        } catch (err) {
+            toast.error('연동 해제 중 오류');
         }
     };
 
@@ -433,6 +472,69 @@ const AdminPage = () => {
                                                     <span className="uppercase tracking-widest text-[9px] font-bold text-slate-300 dark:text-slate-600">Drive Sync ID</span>
                                                     <span className="font-mono text-slate-500">{client.driveFolderId || '폴더 연동 없음'}</span>
                                                 </p>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                                                <p className="uppercase tracking-widest text-[9px] font-bold text-slate-300 dark:text-slate-600 mb-2">Telegram 알림</p>
+                                                {client.telegramChatId ? (
+                                                    <>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5 text-xs font-bold text-green-600 dark:text-green-400">
+                                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                                연동됨
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleTelegramDisconnect(client.id)}
+                                                                className="text-[10px] text-slate-400 hover:text-rose-500 font-bold transition-colors"
+                                                            >
+                                                                해제
+                                                            </button>
+                                                        </div>
+                                                        {client.telegramInviteCode && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(`https://t.me/createtree_bot?start=${client.telegramInviteCode}`);
+                                                                    toast.success('초대 링크가 복사되었습니다!');
+                                                                }}
+                                                                className="mt-2 w-full text-left px-2 py-1.5 text-[10px] font-mono text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer truncate"
+                                                                title="클릭하여 복사"
+                                                            >
+                                                                📋 t.me/createtree_bot?start={client.telegramInviteCode}
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                ) : client.telegramInviteCode ? (
+                                                    <>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+                                                                <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                                                                대기중
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleTelegramInvite(client.id)}
+                                                                className="text-[10px] text-blue-500 hover:text-blue-700 font-bold transition-colors"
+                                                            >
+                                                                링크 재생성
+                                                            </button>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(`https://t.me/createtree_bot?start=${client.telegramInviteCode}`);
+                                                                toast.success('초대 링크가 복사되었습니다!');
+                                                            }}
+                                                            className="mt-2 w-full text-left px-2 py-1.5 text-[10px] font-mono text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer truncate"
+                                                            title="클릭하여 복사"
+                                                        >
+                                                            📋 t.me/createtree_bot?start={client.telegramInviteCode}
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleTelegramInvite(client.id)}
+                                                        className="w-full py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
+                                                    >
+                                                        🔗 초대 링크 생성
+                                                    </button>
+                                                )}
                                             </div>
                                         </>
                                     )}

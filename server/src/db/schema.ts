@@ -7,6 +7,9 @@ export const clients = pgTable("clients", {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     driveFolderId: text("drive_folder_id"),
+    telegramChatId: text("telegram_chat_id"),
+    telegramInviteCode: text("telegram_invite_code"),
+    telegramConnectedAt: timestamp("telegram_connected_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -108,6 +111,8 @@ export const monitoringTemplates = pgTable("monitoring_templates", {
     scheduleLastRunAt: timestamp("schedule_last_run_at"),
     isActive: boolean("is_active").default(true).notNull(),
     analysisMode: text("analysis_mode").default("FULL").notNull(),
+    notifyEnabled: boolean("notify_enabled").default(false).notNull(),
+    notifyChannels: jsonb("notify_channels").$type<string[]>().default(["telegram"]),
     createdBy: integer("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -128,4 +133,19 @@ export const monitoringResults = pgTable("monitoring_results", {
     createdBy: integer("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ===== 알림 시스템 =====
+
+export const notificationLogs = pgTable("notification_logs", {
+    id: serial("id").primaryKey(),
+    clientId: integer("client_id").references(() => clients.id),
+    channel: text("channel").default("telegram").notNull(),
+    messageType: text("message_type").default("monitoring").notNull(),
+    content: text("content").notNull(),
+    status: text("status").default("sent").notNull(),
+    errorMessage: text("error_message"),
+    templateId: integer("template_id").references(() => monitoringTemplates.id),
+    resultId: integer("result_id").references(() => monitoringResults.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
 });

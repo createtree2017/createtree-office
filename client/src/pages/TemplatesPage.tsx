@@ -200,9 +200,9 @@ const TemplatesPage: React.FC = () => {
             <div className="max-w-4xl mx-auto p-6 pt-24 space-y-6 pb-32">
                 <div className="flex items-center justify-between">
                     <h1 className="text-2xl font-bold">{currentTemplateId ? '템플릿 수정' : '새 업무 템플릿 만들기'}</h1>
-                    <div className="space-x-3">
+                    <div className="flex items-center gap-3">
                         <button onClick={() => setIsEditing(false)} className="px-4 py-2 border rounded hover:bg-gray-50">취소</button>
-                        <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
+                        <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-2">
                             <Save className="w-4 h-4" /> 저장하기
                         </button>
                     </div>

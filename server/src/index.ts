@@ -14,6 +14,7 @@ import clientRouter from "./routes/client.js";
 import templatesRouter from "./routes/templates.js";
 import taskResponsesRouter from "./routes/taskResponses.js";
 import monitoringRouter from "./routes/monitoring.js";
+import notificationRouter from "./routes/notification.js";
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use("/api/clients", clientRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/task-responses", taskResponsesRouter);
 app.use("/api/monitoring", monitoringRouter);
+app.use("/api/notification", notificationRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });
@@ -60,7 +62,7 @@ app.listen(port, async () => {
         const monitoringService = new MonitoringService();
         schedulerService.setMonitoringService(monitoringService);
         await schedulerService.initializeSchedules();
-    } catch (e) {
-        console.log("⚠️ 스케줄러 초기화 건너뜀 (비필수)");
+    } catch (e: any) {
+        console.error("⚠️ 스케줄러 초기화 건너뜀:", e?.message || e);
     }
 });
