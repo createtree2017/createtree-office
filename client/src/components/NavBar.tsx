@@ -68,7 +68,7 @@ const NavBar = () => {
 
         ...(user?.role === 'ADMIN' ? [
             { path: '/admin', label: '관리자', icon: Shield },
-            { onClick: () => window.open('https://drive.google.com/drive/my-drive', '_blank'), label: '관리자 드라이브', icon: FolderOpen, isButton: true, className: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm" }
+            { onClick: () => window.open('https://drive.google.com/drive/my-drive', '_blank'), label: '관리자 드라이브', icon: FolderOpen, isButton: true, className: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm" }
         ] : []),
     ];
 

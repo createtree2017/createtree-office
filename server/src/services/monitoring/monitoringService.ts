@@ -93,10 +93,23 @@ export class MonitoringService {
             createdBy: userId,
         }).returning();
 
-        // 비동기 실행
-        this.processMonitoring(template as MonitoringTemplate, result.id).catch((err) => {
-            console.error("모니터링 비동기 실행 오류:", err);
-        });
+        // 비동기 실행 — Promise를 확실히 catch하여 unhandled rejection 방지
+        const safeProcess = async () => {
+            try {
+                await this.processMonitoring(template as MonitoringTemplate, result.id);
+            } catch (err) {
+                console.error(`❌ 모니터링 비동기 실행 오류 (템플릿 #${templateId}):`, err instanceof Error ? err.message : err);
+                // 실패 시 결과 상태를 FAILED로 확실히 업데이트
+                try {
+                    await db.update(monitoringResults).set({
+                        status: "FAILED",
+                        errorLog: { message: err instanceof Error ? err.message : "알 수 없는 오류", timestamp: new Date().toISOString() },
+                        updatedAt: new Date(),
+                    }).where(eq(monitoringResults.id, result.id));
+                } catch { /* DB 업데이트 실패해도 무시 */ }
+            }
+        };
+        safeProcess();
 
         return result.id;
     }
@@ -222,6 +235,24 @@ export class MonitoringService {
             }).where(eq(monitoringResults.id, resultId));
 
             console.log(`🎉 모니터링 완료 - ${template.name} (${Date.now() - startTime}ms)`);
+
+            // Step 5: Telegram 알림 발송
+            try {
+                if ((template as any).notifyEnabled) {
+                    const { telegramService } = await import("../notification/telegramService.js");
+                    await telegramService.sendMonitoringAlert(
+                        template.clientId,
+                        template.name,
+                        posts.length,
+                        analysis.summary,
+                        resultId,
+                        template.id,
+                        analysis.sentiment_distribution,
+                    );
+                }
+            } catch (notifyErr) {
+                console.error("알림 발송 실패 (결과는 정상 저장):", notifyErr);
+            }
         } catch (error) {
             console.error(`❌ 모니터링 실패 - ${template.name}:`, error);
             await db.update(monitoringResults).set({

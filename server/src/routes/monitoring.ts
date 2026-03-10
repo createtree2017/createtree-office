@@ -65,10 +65,14 @@ router.post("/templates", authenticateToken, authorizeRole(["ADMIN", "MANAGER", 
             createdBy: user.id,
         });
 
-        // 스케줄러 갱신
-        if (scheduleEnabled && scheduleCron) {
-            const { schedulerService } = await import("../services/monitoring/schedulerService.js");
-            schedulerService.updateSchedule(created.id, true, scheduleCron);
+        // 스케줄러 갱신 (실패해도 템플릿 저장은 유지)
+        try {
+            if (scheduleEnabled && scheduleCron) {
+                const { schedulerService } = await import("../services/monitoring/schedulerService.js");
+                schedulerService.updateSchedule(created.id, true, scheduleCron);
+            }
+        } catch (schedErr) {
+            console.error("⚠️ 스케줄 등록 실패 (템플릿은 정상 저장됨):", schedErr);
         }
 
         res.json({ success: true, data: created });
@@ -85,9 +89,13 @@ router.put("/templates/:id", authenticateToken, authorizeRole(["ADMIN", "MANAGER
         const updated = await monitoringService.updateTemplate(id, req.body);
         if (!updated) return res.status(404).json({ success: false, message: "템플릿을 찾을 수 없습니다." });
 
-        // 스케줄러 갱신
-        const { schedulerService } = await import("../services/monitoring/schedulerService.js");
-        schedulerService.updateSchedule(id, req.body.scheduleEnabled || false, req.body.scheduleCron);
+        // 스케줄러 갱신 (실패해도 템플릿 수정은 유지)
+        try {
+            const { schedulerService } = await import("../services/monitoring/schedulerService.js");
+            schedulerService.updateSchedule(id, req.body.scheduleEnabled || false, req.body.scheduleCron);
+        } catch (schedErr) {
+            console.error("⚠️ 스케줄 갱신 실패 (템플릿은 정상 수정됨):", schedErr);
+        }
 
         res.json({ success: true, data: updated });
     } catch (error: any) {
@@ -205,6 +213,16 @@ router.delete("/results", authenticateToken, authorizeRole(["ADMIN", "MANAGER"])
     } catch (error: any) {
         console.error("결과 삭제 오류:", error);
         res.status(500).json({ success: false, message: "결과 삭제 실패" });
+    }
+});
+
+// 스케줄러 상태 확인 (디버그용)
+router.get("/scheduler/status", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const { schedulerService } = await import("../services/monitoring/schedulerService.js");
+        res.json({ success: true, data: schedulerService.getActiveSchedules() });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: "스케줄러 상태 조회 실패" });
     }
 });
 

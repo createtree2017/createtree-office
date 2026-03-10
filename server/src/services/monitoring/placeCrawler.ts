@@ -116,21 +116,79 @@ export class PlaceCrawler {
     }
 
     // ===============================================
-    // 카카오맵 리뷰 수집
+    // 카카오맵 리뷰 수집 (2026.03 API 업데이트)
     // ===============================================
     async crawlKakaoMap(placeId: string, maxReviews: number = 20): Promise<PostData[]> {
         console.log(`🔍 카카오맵 리뷰 수집: placeId=${placeId}, max=${maxReviews}`);
         const posts: PostData[] = [];
 
-        // 시도 1: commentlist API
+        const commonHeaders = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Referer": "https://place.map.kakao.com/",
+            "Accept": "application/json, text/plain, */*",
+        };
+
+        // 시도 1: 신규 API (place-api.map.kakao.com)
+        try {
+            const url = `https://place-api.map.kakao.com/places/tab/reviews/kakaomap/${placeId}`;
+            console.log(`📡 카카오 신규 API 호출: ${url}`);
+            const response = await axios.get(url, {
+                params: { order: "RECENT", only_photo_review: false, page: 1, size: Math.min(maxReviews, 50) },
+                headers: {
+                    ...commonHeaders,
+                    "pf": "PC",
+                    "appversion": "6.6.0",
+                },
+                timeout: 8000,
+            });
+
+            console.log(`📝 카카오 신규 API 응답 (${response.status}):`, JSON.stringify(response.data).substring(0, 300));
+
+            // 응답 구조 탐색 — 여러 가능한 경로 시도
+            const items: any[] =
+                response.data?.reviews ||
+                response.data?.comment?.list ||
+                response.data?.commentList ||
+                response.data?.list ||
+                response.data?.data?.reviews ||
+                (Array.isArray(response.data) ? response.data : []);
+
+            console.log(`📝 카카오 신규 API ${items.length}개`);
+
+            for (let i = 0; i < Math.min(items.length, maxReviews); i++) {
+                const r = items[i];
+                const body = (r?.contents || r?.content || r?.comment || r?.text || r?.body || "").trim();
+                if (!body || body.length < 2) continue;
+                const rating = r?.star_rating || r?.rating || r?.point;
+                posts.push({
+                    id: `kakao_${placeId}_${r?.id || i}`,
+                    title: `카카오맵 리뷰${rating ? ` ⭐${rating}` : ""}`,
+                    content: body,
+                    author: r?.meta?.owner?.nickname || r?.username || r?.nickname || r?.name || "익명",
+                    publishedAt: this.parseDate(r?.registered_at || r?.created_at || r?.datetime || r?.date),
+                    url: `https://place.map.kakao.com/${placeId}`,
+                    platform: "kakao",
+                    source: "kakaomap",
+                });
+            }
+
+            if (posts.length > 0) {
+                console.log(`✅ 카카오맵 신규 API ${posts.length}개 수집 완료`);
+                return posts;
+            }
+        } catch (err: any) {
+            const status = err?.response?.status;
+            const body = JSON.stringify(err?.response?.data || {}).substring(0, 300);
+            console.warn(`⚠️ 카카오 신규 API 실패 (${status || err?.code || err?.message}): ${body}`);
+        }
+
+        // 시도 2: 기존 commentlist API (fallback)
         try {
             const url = `https://place.map.kakao.com/commentlist/v/${placeId}?page=1&size=${Math.min(maxReviews, 50)}`;
+            console.log(`📡 카카오 commentlist API 호출: ${url}`);
             const response = await axios.get(url, {
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": "https://map.kakao.com/",
-                },
-                timeout: 10000,
+                headers: commonHeaders,
+                timeout: 8000,
             });
 
             const items: any[] =
@@ -150,7 +208,7 @@ export class PlaceCrawler {
                     title: `카카오맵 리뷰`,
                     content: body,
                     author: r?.username || r?.name || "익명",
-                    publishedAt: r?.datetime || r?.date || new Date().toLocaleDateString("ko-KR"),
+                    publishedAt: this.parseDate(r?.datetime || r?.date),
                     url: `https://place.map.kakao.com/${placeId}`,
                     platform: "kakao",
                     source: "kakaomap",
@@ -158,22 +216,22 @@ export class PlaceCrawler {
             }
 
             if (posts.length > 0) {
-                console.log(`✅ 카카오맵 ${posts.length}개 수집 완료`);
+                console.log(`✅ 카카오맵 commentlist ${posts.length}개 수집 완료`);
                 return posts;
             }
         } catch (err: any) {
             console.warn(`⚠️ 카카오 commentlist API 실패: ${err?.response?.status || err?.message}`);
         }
 
-        // 시도 2: main API
+        // 시도 3: main API (최종 fallback)
         try {
             const url = `https://place.map.kakao.com/main/v/${placeId}`;
             const response = await axios.get(url, {
                 headers: {
+                    ...commonHeaders,
                     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                    "Referer": "https://map.kakao.com/",
                 },
-                timeout: 10000,
+                timeout: 8000,
             });
 
             const items: any[] =
@@ -190,7 +248,7 @@ export class PlaceCrawler {
                     title: `카카오맵 리뷰`,
                     content: body,
                     author: r?.username || "익명",
-                    publishedAt: r?.datetime || new Date().toLocaleDateString("ko-KR"),
+                    publishedAt: this.parseDate(r?.datetime),
                     url: `https://place.map.kakao.com/${placeId}`,
                     platform: "kakao",
                     source: "kakaomap",
@@ -200,7 +258,7 @@ export class PlaceCrawler {
             console.warn(`⚠️ 카카오 main API 실패: ${err?.response?.status || err?.message}`);
         }
 
-        console.log(`✅ 카카오맵 ${posts.length}개 수집 완료`);
+        console.log(`✅ 카카오맵 총 ${posts.length}개 수집 완료 (3단계 시도 완료)`);
         return posts;
     }
 
