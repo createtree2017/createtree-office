@@ -2,6 +2,9 @@
     "name": "createtree-office",
     "version": "1.0.0",
     "private": true,
+    "engines": {
+        "node": ">=20"
+    },
     "scripts": {
         "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
         "server:dev": "npm run dev --prefix server",
