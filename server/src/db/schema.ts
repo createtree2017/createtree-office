@@ -85,3 +85,43 @@ export const taskResponses = pgTable("task_responses", {
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ===== 모니터링 시스템 =====
+
+export const monitoringStatusEnum = pgEnum("monitoring_status", ["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]);
+
+export const monitoringTemplates = pgTable("monitoring_templates", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    clientId: integer("client_id").references(() => clients.id).notNull(),
+    keywords: jsonb("keywords").notNull().$type<string[]>(),
+    monitoringScope: jsonb("monitoring_scope").notNull().$type<string[]>(), // ['blog', 'cafe', 'cafe_specific', 'news', 'naverplace', 'kakaomap']
+    searchType: text("search_type").default("latest").notNull(), // latest | accuracy
+    dateRange: integer("date_range").default(7).notNull(), // days
+    collectCount: integer("collect_count").default(10).notNull(),
+    crawlingMethod: text("crawling_method").default("api").notNull(), // api | hybrid
+    targetPlaces: jsonb("target_places").$type<Array<{ platform: string; url: string; name?: string }>>(), // 지정 플레이스 URL
+    targetCafes: jsonb("target_cafes").$type<Array<{ url: string; name?: string }>>(), // 지정 카페 URL
+    isActive: boolean("is_active").default(true).notNull(),
+    analysisMode: text("analysis_mode").default("FULL").notNull(), // FULL | SUMMARY
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const monitoringResults = pgTable("monitoring_results", {
+    id: serial("id").primaryKey(),
+    templateId: integer("template_id").references(() => monitoringTemplates.id).notNull(),
+    clientId: integer("client_id").references(() => clients.id).notNull(),
+    status: monitoringStatusEnum("status").default("PENDING").notNull(),
+    posts: jsonb("posts").$type<any[]>(),
+    statistics: jsonb("statistics"),
+    summary: text("summary"),
+    executionTimeMs: integer("execution_time_ms"),
+    errorLog: jsonb("error_log"),
+    retryCount: integer("retry_count").default(0).notNull(),
+    driveFileId: text("drive_file_id"), // 구글 드라이브 HTML 보고서 파일 ID
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

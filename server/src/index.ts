@@ -13,6 +13,7 @@ import driveRouter from "./routes/drive.js";
 import clientRouter from "./routes/client.js";
 import templatesRouter from "./routes/templates.js";
 import taskResponsesRouter from "./routes/taskResponses.js";
+import monitoringRouter from "./routes/monitoring.js";
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use("/api/drive", driveRouter);
 app.use("/api/clients", clientRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/task-responses", taskResponsesRouter);
+app.use("/api/monitoring", monitoringRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });

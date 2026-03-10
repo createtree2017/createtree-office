@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate } from 'lucide-react';
+import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // 다크모드 훅
@@ -57,6 +57,10 @@ const NavBar = () => {
         { path: '/manuals', label: '매뉴얼', icon: Book },
         { path: '/tasks', label: '업무', icon: CheckSquare },
         { path: '/drive', label: '자료실', icon: FolderOpen },
+
+        ...(user && ['ADMIN', 'MANAGER', 'HOSPITAL_ADMIN'].includes(user.role) ? [
+            { path: '/monitoring', label: '모니터링', icon: Activity },
+        ] : []),
 
         ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
             { path: '/templates', label: '템플릿 관리', icon: LayoutTemplate },

@@ -11,7 +11,10 @@
         "db:push": "drizzle-kit push"
     },
     "dependencies": {
+        "@google/genai": "^1.44.0",
+        "axios": "^1.13.6",
         "bcryptjs": "^2.4.3",
+        "cheerio": "^1.2.0",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "drizzle-orm": "^0.30.10",
@@ -19,7 +22,9 @@
         "googleapis": "^171.4.0",
         "jsonwebtoken": "^9.0.2",
         "multer": "^2.1.1",
-        "postgres": "^3.4.4"
+        "postgres": "^3.4.4",
+        "puppeteer": "^24.38.0",
+        "xlsx": "^0.18.5"
     },
     "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
