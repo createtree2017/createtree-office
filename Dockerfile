@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
 # Puppeteer가 번들 Chromium 대신 시스템 Chromium 사용하도록 설정
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -39,6 +38,9 @@ RUN npm run build --prefix client
 
 # 서버 빌드
 RUN npm run build --prefix server
+
+# 런타임 환경 설정 (빌드 후에 설정해야 devDependencies 정상 설치)
+ENV NODE_ENV=production
 
 # 포트 설정 (Railway가 PORT 환경변수를 제공)
 EXPOSE ${PORT:-5050}
