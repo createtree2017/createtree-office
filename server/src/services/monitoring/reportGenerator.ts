@@ -84,7 +84,7 @@ export class ReportGenerator {
         const summaryData = [
             ["모니터링 보고서"],
             ["대상", template.name],
-            ["키워드", template.keywords.join(", ")],
+            ["키워드", (template.keywords ?? []).join(", ")],
             ["분석일", new Date().toISOString().split("T")[0]],
             ["총 게시글", posts.length],
             [],
@@ -206,7 +206,7 @@ a:hover{text-decoration:underline}
         <div class="summary-text">${analysis.summary || "분석 요약이 없습니다."}</div>
         <div style="margin-top:16px">
             <strong>모니터링 키워드:</strong>
-            <div class="keywords">${template.keywords.map((k) => `<span class="keyword">${k}</span>`).join("")}</div>
+            <div class="keywords">${(template.keywords ?? []).map((k) => `<span class="keyword">${k}</span>`).join("")}</div>
         </div>
         ${analysis.key_topics.length > 0 ? `<div style="margin-top:12px"><strong>주요 토픽:</strong><div class="keywords">${analysis.key_topics.map((t) => `<span class="keyword">${t}</span>`).join("")}</div></div>` : ""}
     </div>

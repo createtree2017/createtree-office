@@ -110,7 +110,7 @@ export class MonitoringService {
                 scope: template.monitoringScope,
             };
 
-            let posts = await this.naverCollector.crawlSearch(template.keywords, crawlOptions);
+            let posts = await this.naverCollector.crawlSearch(template.keywords ?? [], crawlOptions);
             console.log(`✅ API 수집 완료 - ${posts.length}개 게시글`);
 
             // Step 1.5: 콘텐츠 보강 크롤링 (crawlingMethod가 hybrid/unified일 때)
@@ -155,7 +155,7 @@ export class MonitoringService {
                         const cafeId = this.extractCafeId(cafe.url);
                         if (!cafeId) { console.warn(`⚠️ 카페 ID 추출 실패: ${cafe.url}`); continue; }
                         // 네이버 카페 내 검색 API 활용
-                        for (const keyword of template.keywords) {
+                        for (const keyword of (template.keywords ?? [])) {
                             const cafeSearchUrl = `https://openapi.naver.com/v1/search/cafearticle.json?query=${encodeURIComponent(keyword)}&display=${template.collectCount}&sort=date&filter=cafe_url:${cafeId}`;
                             // API 기반이므로 naverCollector로 처리 (향후 확장)
                         }

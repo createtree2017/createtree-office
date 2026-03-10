@@ -106,7 +106,7 @@ export class SentimentAnalyzer {
 }
 분석 시 전체 맥락과 의도로 감정을 판단하세요.`;
 
-        const userPrompt = `제목: ${post.title}\n내용: ${post.content}\n분석 대상 키워드: ${template.keywords.join(", ")}`;
+        const userPrompt = `제목: ${post.title}\n내용: ${post.content}\n분석 대상 키워드: ${(template.keywords ?? []).join(", ")}`;
 
         const response = await this.gemini.models.generateContent({
             model: "gemini-2.5-flash",
@@ -174,7 +174,7 @@ export class SentimentAnalyzer {
                     negative: total > 0 ? Math.round((counts.negative / total) * 100) : 0,
                 },
             },
-            key_topics: template.keywords.slice(0, 5),
+            key_topics: (template.keywords ?? []).slice(0, 5),
             positive_points: [],
             improvement_areas: [],
             summary: this.fallbackSummary(counts, total, template),
