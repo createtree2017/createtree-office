@@ -51,6 +51,16 @@ if (process.env.NODE_ENV === "production") {
     });
 }
 
-app.listen(port, () => {
+app.listen(port, async () => {
     console.log(`Server is running at http://localhost:${port}`);
+    // 스케줄러 초기화
+    try {
+        const { schedulerService } = await import("./services/monitoring/schedulerService.js");
+        const { MonitoringService } = await import("./services/monitoring/monitoringService.js");
+        const monitoringService = new MonitoringService();
+        schedulerService.setMonitoringService(monitoringService);
+        await schedulerService.initializeSchedules();
+    } catch (e) {
+        console.log("⚠️ 스케줄러 초기화 건너뜀 (비필수)");
+    }
 });

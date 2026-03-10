@@ -37,26 +37,39 @@ router.get("/templates/:id", authenticateToken, async (req: AuthRequest, res) =>
 router.post("/templates", authenticateToken, authorizeRole(["ADMIN", "MANAGER", "HOSPITAL_ADMIN"]), async (req: AuthRequest, res) => {
     try {
         const user = req.user!;
-        const { name, clientId, keywords, monitoringScope, searchType, dateRange, collectCount, crawlingMethod, analysisMode, targetPlaces, targetCafes } = req.body;
+        const { name, templateType, clientId, keywords, monitoringScope, searchType, dateRange, collectCount, crawlingMethod, analysisMode, targetPlaces, targetCafes, scheduleEnabled, scheduleCron } = req.body;
 
-        if (!name || !clientId || !keywords || !Array.isArray(keywords) || keywords.length === 0) {
-            return res.status(400).json({ success: false, message: "필수 항목을 입력해주세요. (이름, 거래처, 키워드)" });
+        // 통합검색은 키워드 필수, 플레이스는 불필요
+        if (!name || !clientId) {
+            return res.status(400).json({ success: false, message: "필수 항목을 입력해주세요. (이름, 거래처)" });
+        }
+        if (templateType !== 'place' && (!keywords || !Array.isArray(keywords) || keywords.length === 0)) {
+            return res.status(400).json({ success: false, message: "통합검색 템플릿은 키워드가 필수입니다." });
         }
 
         const created = await monitoringService.createTemplate({
             name,
+            templateType: templateType || "integrated",
             clientId: parseInt(clientId),
-            keywords,
-            monitoringScope: monitoringScope || ["blog", "cafe"],
+            keywords: templateType === 'place' ? null : keywords,
+            monitoringScope: monitoringScope || (templateType === 'place' ? ["naverplace"] : ["blog", "cafe"]),
             searchType: searchType || "latest",
             dateRange: dateRange || 7,
             collectCount: collectCount || 10,
-            crawlingMethod: crawlingMethod || "api",
+            crawlingMethod: templateType === 'place' ? 'hybrid' : (crawlingMethod || "api"),
             analysisMode: analysisMode || "FULL",
             targetPlaces: targetPlaces || null,
             targetCafes: targetCafes || null,
+            scheduleEnabled: scheduleEnabled || false,
+            scheduleCron: scheduleCron || null,
             createdBy: user.id,
         });
+
+        // 스케줄러 갱신
+        if (scheduleEnabled && scheduleCron) {
+            const { schedulerService } = await import("../services/monitoring/schedulerService.js");
+            schedulerService.updateSchedule(created.id, true, scheduleCron);
+        }
 
         res.json({ success: true, data: created });
     } catch (error: any) {
@@ -68,8 +81,14 @@ router.post("/templates", authenticateToken, authorizeRole(["ADMIN", "MANAGER", 
 // 템플릿 수정
 router.put("/templates/:id", authenticateToken, authorizeRole(["ADMIN", "MANAGER", "HOSPITAL_ADMIN"]), async (req: AuthRequest, res) => {
     try {
-        const updated = await monitoringService.updateTemplate(parseInt(req.params.id), req.body);
+        const id = parseInt(req.params.id);
+        const updated = await monitoringService.updateTemplate(id, req.body);
         if (!updated) return res.status(404).json({ success: false, message: "템플릿을 찾을 수 없습니다." });
+
+        // 스케줄러 갱신
+        const { schedulerService } = await import("../services/monitoring/schedulerService.js");
+        schedulerService.updateSchedule(id, req.body.scheduleEnabled || false, req.body.scheduleCron);
+
         res.json({ success: true, data: updated });
     } catch (error: any) {
         res.status(500).json({ success: false, message: "템플릿 수정 실패" });
