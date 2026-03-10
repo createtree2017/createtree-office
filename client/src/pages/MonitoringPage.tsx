@@ -256,10 +256,10 @@ const MonitoringPage = () => {
                             <div key={t.id} className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-start justify-between">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${t.templateType === 'place' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>{t.templateType === 'place' ? '\ud83c\udfe5 \ud50c\ub808\uc774\uc2a4' : '\ud83d\udd0d \ud1b5\ud569\uac80\uc0c9'}</span>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${t.templateType === 'place' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>{t.templateType === 'place' ? '🏥 플레이스' : '🔍 통합검색'}</span>
                                         <h3 className="font-semibold text-[hsl(var(--foreground))]">{t.name}</h3>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>{t.isActive ? '\ud65c\uc131' : '\ube44\ud65c\uc131'}</span>
-                                        {t.scheduleEnabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">\ud83d\udd50 \uc790\ub3d9</span>}
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>{t.isActive ? '활성' : '비활성'}</span>
+                                        {t.scheduleEnabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">{"🕐 자동"}</span>}
                                     </div>
                                     {t.keywords && t.keywords.length > 0 && (
                                         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -272,20 +272,20 @@ const MonitoringPage = () => {
                                         </div>
                                     )}
                                     <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        \ubc94\uc704: {t.monitoringScope?.join(', ')} | \uac70\ub798\ucc98: {clients.find(c => c.id === t.clientId)?.name || t.clientId} | \uc218\uc9d1: {t.collectCount}\uac74
-                                        {t.scheduleEnabled && t.scheduleCron && ` | \uc790\ub3d9: ${t.scheduleCron}`}
+                                        범위: {t.monitoringScope?.join(', ')} | 거래처: {clients.find(c => c.id === t.clientId)?.name || t.clientId} | 수집: {t.collectCount}건
+                                        {t.scheduleEnabled && t.scheduleCron && ` | 자동: ${t.scheduleCron}`}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 ml-4">
                                     <button onClick={() => executeMonitoring(t.id)} disabled={executing.has(t.id)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                         {executing.has(t.id) ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-                                        {executing.has(t.id) ? '\uc2e4\ud589\uc911...' : '\uc2e4\ud589'}
+                                        {executing.has(t.id) ? '실행중...' : '실행'}
                                     </button>
-                                    <button onClick={() => setEditingTemplate(t)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="\uc218\uc815">
+                                    <button onClick={() => setEditingTemplate(t)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="수정">
                                         <Pencil size={16} />
                                     </button>
-                                    <button onClick={() => deleteTemplate(t.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="\uc0ad\uc81c">
+                                    <button onClick={() => deleteTemplate(t.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="삭제">
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
@@ -512,15 +512,15 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                     <div className="grid grid-cols-2 gap-4">
                         <button onClick={() => { setTemplateType('integrated'); setStep('form'); }}
                             className="p-6 rounded-xl border-2 border-[hsl(var(--border))] hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all text-center">
-                            <div className="text-3xl mb-3">{'\ud83d\udd0d'}</div>
+                            <div className="text-3xl mb-3">{"🔍"}</div>
                             <h3 className="font-bold text-[hsl(var(--foreground))] mb-1">통합검색</h3>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">블로그, 카페, 뉴스<br/>키워드 기반 API 검색</p>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))]">{"블로그, 카페, 뉴스"}<br />{"키워드 기반 API 검색"}</p>
                         </button>
                         <button onClick={() => { setTemplateType('place'); setStep('form'); }}
                             className="p-6 rounded-xl border-2 border-[hsl(var(--border))] hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-all text-center">
-                            <div className="text-3xl mb-3">{'\ud83c\udfe5'}</div>
+                            <div className="text-3xl mb-3">{"🏥"}</div>
                             <h3 className="font-bold text-[hsl(var(--foreground))] mb-1">플레이스</h3>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">네이버/카카오/구글<br/>플레이스 리뷰 크롤링</p>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))]">{"네이버/카카오/구글"}<br />{"플레이스 리뷰 크롤링"}</p>
                         </button>
                     </div>
                 </div>
@@ -533,9 +533,9 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
             <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 z-10 bg-[hsl(var(--card))] px-6 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between rounded-t-2xl">
                     <div className="flex items-center gap-2">
-                        {!isEdit && <button type="button" onClick={() => setStep('selectType')} className="p-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">{'\u2190'}</button>}
+                        {!isEdit && <button type="button" onClick={() => setStep('selectType')} className="p-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">{"←"}</button>}
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${templateType === 'place' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                            {templateType === 'place' ? '\ud83c\udfe5 플레이스' : '\ud83d\udd0d 통합검색'}
+                            {templateType === 'place' ? '🏥 플레이스' : '🔍 통합검색'}
                         </span>
                         <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">{isEdit ? '템플릿 수정' : '새 템플릿'}</h2>
                     </div>
@@ -562,7 +562,7 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                         <div>
                             <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">모니터링 범위</label>
                             <div className="space-y-2">
-                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))]">\ud83d\udd0d 네이버 검색 (API)</p>
+                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))]">{"🔍 네이버 검색 (API)"}</p>
                                 <div className="flex gap-2">
                                     {['blog', 'news'].map(s => (
                                         <button key={s} type="button" onClick={() => toggleScope(s)}
@@ -571,12 +571,12 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))] mt-2">\u2615 카페</p>
+                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))] mt-2">{"☕ 카페"}</p>
                                 <div className="flex gap-2">
                                     <button type="button" onClick={() => { toggleScope('cafe'); if (scope.includes('cafe_specific')) setScope(prev => prev.filter(x => x !== 'cafe_specific')); }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes('cafe') ? 'bg-violet-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>전체 검색</button>
                                     <button type="button" onClick={() => { toggleScope('cafe_specific'); if (scope.includes('cafe')) setScope(prev => prev.filter(x => x !== 'cafe')); }}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes('cafe_specific') ? 'bg-emerald-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>\ud83d\udccc 지정 카페</button>
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes('cafe_specific') ? 'bg-emerald-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>{"📌 지정 카페"}</button>
                                 </div>
                                 {hasCafeSpecific && (
                                     <div className="ml-2 space-y-2 mt-2">
@@ -587,7 +587,7 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                                                 <button type="button" onClick={() => removeCafe(i)} className="text-red-400 hover:text-red-600"><X size={16} /></button>
                                             </div>
                                         ))}
-                                        <button type="button" onClick={addCafe} className="text-xs text-emerald-600 hover:underline">+ 카페 URL 추가</button>
+                                        <button type="button" onClick={addCafe} className="text-xs text-emerald-600 hover:underline">{"+ 카페 URL 추가"}</button>
                                     </div>
                                 )}
                             </div>
@@ -623,26 +623,26 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                                 ))}
                             </div>
                             <div className="flex gap-2 mt-3">
-                                <button type="button" onClick={() => addPlace('naverplace')} className="text-xs text-green-600 hover:underline font-medium">+ 네이버 플레이스</button>
-                                <button type="button" onClick={() => addPlace('kakaomap')} className="text-xs text-yellow-600 hover:underline font-medium">+ 카카오맵</button>
-                                <button type="button" onClick={() => addPlace('googleplace')} className="text-xs text-blue-600 hover:underline font-medium">+ 구글 플레이스</button>
+                                <button type="button" onClick={() => addPlace('naverplace')} className="text-xs text-green-600 hover:underline font-medium">{"+ 네이버 플레이스"}</button>
+                                <button type="button" onClick={() => addPlace('kakaomap')} className="text-xs text-yellow-600 hover:underline font-medium">{"+ 카카오맵"}</button>
+                                <button type="button" onClick={() => addPlace('googleplace')} className="text-xs text-blue-600 hover:underline font-medium">{"+ 구글 플레이스"}</button>
                             </div>
                         </div>
                     )}
 
                     <div>
                         <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">
-                            수집 개수: <span className="text-violet-600">{collectCount}개</span>
-                            <span className="text-xs text-[hsl(var(--muted-foreground))] ml-2">(최대 {templateType === 'place' ? 100 : 50}개)</span>
+                            {"수집 개수: "}<span className="text-violet-600">{collectCount}{"개"}</span>
+                            <span className="text-xs text-[hsl(var(--muted-foreground))] ml-2">{"(최대 "}{templateType === 'place' ? '100' : '50'}{"개)"}</span>
                         </label>
                         <input type="range" min={5} max={templateType === 'place' ? 100 : 50} step={5} value={collectCount}
                             onChange={e => setCollectCount(parseInt(e.target.value))} className="w-full accent-violet-600" />
-                        <div className="flex justify-between text-xs text-[hsl(var(--muted-foreground))]"><span>5개</span><span>{templateType === 'place' ? '100개' : '50개'}</span></div>
+                        <div className="flex justify-between text-xs text-[hsl(var(--muted-foreground))]"><span>{"5개"}</span><span>{templateType === 'place' ? '100개' : '50개'}</span></div>
                     </div>
 
                     <div className="border border-[hsl(var(--border))] rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
-                            <label className="text-sm font-semibold text-[hsl(var(--foreground))]">\ud83d\udd50 자동 실행</label>
+                            <label className="text-sm font-semibold text-[hsl(var(--foreground))]">{"🕐 자동 실행"}</label>
                             <button type="button" onClick={() => setScheduleEnabled(!scheduleEnabled)}
                                 className={`w-11 h-6 rounded-full transition-colors relative ${scheduleEnabled ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
                                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${scheduleEnabled ? 'left-[22px]' : 'left-0.5'}`} />
@@ -654,7 +654,7 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
                                 <select value={scheduleHour} onChange={e => setScheduleHour(parseInt(e.target.value))} className={inputCls}>
                                     {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
                                 </select>
-                                <p className="text-xs text-violet-600 mt-1">매일 {String(scheduleHour).padStart(2, '0')}:00에 자동 실행됩니다</p>
+                                <p className="text-xs text-violet-600 mt-1">{`매일 ${String(scheduleHour).padStart(2, '0')}:00에 자동 실행됩니다`}</p>
                             </div>
                         )}
                     </div>
@@ -672,4 +672,3 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
 };
 
 export default MonitoringPage;
-
