@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
 # Puppeteer가 번들 Chromium 대신 시스템 Chromium 사용하도록 설정
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production
 
 WORKDIR /app
 
