@@ -64,8 +64,9 @@ export interface CrawlOptions {
 export interface MonitoringTemplate {
     id: number;
     name: string;
+    templateType: string; // 'integrated' | 'place'
     clientId: number;
-    keywords: string[];
+    keywords: string[] | null;
     monitoringScope: string[];
     searchType: string;
     dateRange: number;
@@ -73,6 +74,9 @@ export interface MonitoringTemplate {
     crawlingMethod: string;
     targetPlaces: Array<{ platform: string; url: string; name?: string }> | null;
     targetCafes: Array<{ url: string; name?: string }> | null;
+    scheduleEnabled: boolean;
+    scheduleCron: string | null;
+    scheduleLastRunAt: Date | null;
     isActive: boolean;
     analysisMode: string;
     createdBy: number | null;

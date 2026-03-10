@@ -93,17 +93,21 @@ export const monitoringStatusEnum = pgEnum("monitoring_status", ["PENDING", "RUN
 export const monitoringTemplates = pgTable("monitoring_templates", {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
+    templateType: text("template_type").default("integrated").notNull(), // integrated | place
     clientId: integer("client_id").references(() => clients.id).notNull(),
-    keywords: jsonb("keywords").notNull().$type<string[]>(),
-    monitoringScope: jsonb("monitoring_scope").notNull().$type<string[]>(), // ['blog', 'cafe', 'cafe_specific', 'news', 'naverplace', 'kakaomap']
-    searchType: text("search_type").default("latest").notNull(), // latest | accuracy
-    dateRange: integer("date_range").default(7).notNull(), // days
+    keywords: jsonb("keywords").$type<string[]>(), // nullable: 플레이스 템플릿은 키워드 불필요
+    monitoringScope: jsonb("monitoring_scope").notNull().$type<string[]>(),
+    searchType: text("search_type").default("latest").notNull(),
+    dateRange: integer("date_range").default(7).notNull(),
     collectCount: integer("collect_count").default(10).notNull(),
-    crawlingMethod: text("crawling_method").default("api").notNull(), // api | hybrid
-    targetPlaces: jsonb("target_places").$type<Array<{ platform: string; url: string; name?: string }>>(), // 지정 플레이스 URL
-    targetCafes: jsonb("target_cafes").$type<Array<{ url: string; name?: string }>>(), // 지정 카페 URL
+    crawlingMethod: text("crawling_method").default("api").notNull(),
+    targetPlaces: jsonb("target_places").$type<Array<{ platform: string; url: string; name?: string }>>(),
+    targetCafes: jsonb("target_cafes").$type<Array<{ url: string; name?: string }>>(),
+    scheduleEnabled: boolean("schedule_enabled").default(false).notNull(),
+    scheduleCron: text("schedule_cron"), // cron expression, 예: '0 9 * * *' (매일 9시)
+    scheduleLastRunAt: timestamp("schedule_last_run_at"),
     isActive: boolean("is_active").default(true).notNull(),
-    analysisMode: text("analysis_mode").default("FULL").notNull(), // FULL | SUMMARY
+    analysisMode: text("analysis_mode").default("FULL").notNull(),
     createdBy: integer("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

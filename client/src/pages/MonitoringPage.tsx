@@ -9,7 +9,7 @@ const getHeaders = () => ({
 });
 const getAuthOnly = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 
-interface Template { id: number; name: string; clientId: number; keywords: string[]; monitoringScope: string[]; isActive: boolean; collectCount: number; searchType: string; dateRange: number; crawlingMethod: string; analysisMode: string; createdAt: string; }
+interface Template { id: number; name: string; templateType?: string; clientId: number; keywords: string[] | null; monitoringScope: string[]; isActive: boolean; collectCount: number; searchType: string; dateRange: number; crawlingMethod: string; analysisMode: string; scheduleEnabled?: boolean; scheduleCron?: string | null; scheduleLastRunAt?: string | null; createdAt: string; targetPlaces?: Array<{ platform: string; url: string; name?: string }>; targetCafes?: Array<{ url: string; name?: string }>; }
 interface Result { id: number; templateId: number; clientId: number; status: string; summary: string | null; executionTimeMs: number | null; driveFileId: string | null; createdAt: string; posts: any[] | null; statistics: any | null; }
 interface Client { id: number; name: string; }
 
@@ -255,27 +255,37 @@ const MonitoringPage = () => {
                         {templates.map(t => (
                             <div key={t.id} className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-start justify-between">
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${t.templateType === 'place' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>{t.templateType === 'place' ? '\ud83c\udfe5 \ud50c\ub808\uc774\uc2a4' : '\ud83d\udd0d \ud1b5\ud569\uac80\uc0c9'}</span>
                                         <h3 className="font-semibold text-[hsl(var(--foreground))]">{t.name}</h3>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>{t.isActive ? '활성' : '비활성'}</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>{t.isActive ? '\ud65c\uc131' : '\ube44\ud65c\uc131'}</span>
+                                        {t.scheduleEnabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">\ud83d\udd50 \uc790\ub3d9</span>}
                                     </div>
-                                    <div className="flex flex-wrap gap-1.5 mb-2">
-                                        {t.keywords.map((k, i) => <span key={i} className="px-2 py-0.5 bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 rounded-full text-xs font-medium">{k}</span>)}
-                                    </div>
+                                    {t.keywords && t.keywords.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mb-2">
+                                            {t.keywords.map((k: string, i: number) => <span key={i} className="px-2 py-0.5 bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 rounded-full text-xs font-medium">{k}</span>)}
+                                        </div>
+                                    )}
+                                    {t.templateType === 'place' && t.targetPlaces && t.targetPlaces.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mb-2">
+                                            {t.targetPlaces.map((p: any, i: number) => <span key={i} className="px-2 py-0.5 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full text-xs font-medium">{p.name || p.platform}</span>)}
+                                        </div>
+                                    )}
                                     <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        범위: {t.monitoringScope?.join(', ')} | 거래처: {clients.find(c => c.id === t.clientId)?.name || t.clientId} | 수집: {t.collectCount}건
+                                        \ubc94\uc704: {t.monitoringScope?.join(', ')} | \uac70\ub798\ucc98: {clients.find(c => c.id === t.clientId)?.name || t.clientId} | \uc218\uc9d1: {t.collectCount}\uac74
+                                        {t.scheduleEnabled && t.scheduleCron && ` | \uc790\ub3d9: ${t.scheduleCron}`}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 ml-4">
                                     <button onClick={() => executeMonitoring(t.id)} disabled={executing.has(t.id)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                         {executing.has(t.id) ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-                                        {executing.has(t.id) ? '실행중...' : '실행'}
+                                        {executing.has(t.id) ? '\uc2e4\ud589\uc911...' : '\uc2e4\ud589'}
                                     </button>
-                                    <button onClick={() => setEditingTemplate(t)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="수정">
+                                    <button onClick={() => setEditingTemplate(t)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="\uc218\uc815">
                                         <Pencil size={16} />
                                     </button>
-                                    <button onClick={() => deleteTemplate(t.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="삭제">
+                                    <button onClick={() => deleteTemplate(t.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="\uc0ad\uc81c">
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
@@ -424,44 +434,56 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
     onClose: () => void;
     onSaved: () => void;
 }) => {
+    const [templateType, setTemplateType] = useState<'integrated' | 'place'>((template?.templateType as any) || 'integrated');
+    const [step, setStep] = useState<'selectType' | 'form'>(mode === 'edit' ? 'form' : 'selectType');
     const [name, setName] = useState(template?.name || '');
     const [clientId, setClientId] = useState(template?.clientId?.toString() || '');
-    const [keywordsStr, setKeywordsStr] = useState(template?.keywords?.join(', ') || '');
-    const [scope, setScope] = useState<string[]>(template?.monitoringScope || ['blog', 'cafe']);
     const [collectCount, setCollectCount] = useState(template?.collectCount || 10);
     const [isActive, setIsActive] = useState(template?.isActive ?? true);
-    const [crawlingMethod, setCrawlingMethod] = useState(template?.crawlingMethod || 'api');
     const [saving, setSaving] = useState(false);
-    const [targetPlaces, setTargetPlaces] = useState<Array<{ platform: string; url: string; name?: string }>>(
-        (template as any)?.targetPlaces || []
-    );
-    const [targetCafes, setTargetCafes] = useState<Array<{ url: string; name?: string }>>(
-        (template as any)?.targetCafes || []
-    );
+    const [keywordsStr, setKeywordsStr] = useState(template?.keywords?.join(', ') || '');
+    const [scope, setScope] = useState<string[]>(template?.monitoringScope || ['blog', 'cafe']);
+    const [crawlingMethod, setCrawlingMethod] = useState(template?.crawlingMethod || 'api');
+    const [targetCafes, setTargetCafes] = useState<Array<{ url: string; name?: string }>>(template?.targetCafes || []);
+    const [targetPlaces, setTargetPlaces] = useState<Array<{ platform: string; url: string; name?: string }>>(template?.targetPlaces || []);
+    const [scheduleEnabled, setScheduleEnabled] = useState(template?.scheduleEnabled || false);
+    const [scheduleHour, setScheduleHour] = useState(() => {
+        if (template?.scheduleCron) { const parts = template.scheduleCron.split(' '); return parseInt(parts[1]) || 9; }
+        return 9;
+    });
 
     const isEdit = mode === 'edit';
-    const hasPlaceScope = scope.some(s => ['naverplace', 'kakaomap'].includes(s));
     const hasCafeSpecific = scope.includes('cafe_specific');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name || !clientId || !keywordsStr.trim()) { toast.error('필수 항목을 입력해주세요.'); return; }
-        if (hasPlaceScope && targetPlaces.filter(p => p.url.trim()).length === 0) { toast.error('플레이스 URL을 입력해주세요.'); return; }
-        if (hasCafeSpecific && targetCafes.filter(c => c.url.trim()).length === 0) { toast.error('지정 카페 URL을 입력해주세요.'); return; }
+        if (!name || !clientId) { toast.error('이름과 거래처를 입력해주세요.'); return; }
+        if (templateType === 'integrated' && !keywordsStr.trim()) { toast.error('키워드를 입력해주세요.'); return; }
+        if (templateType === 'place' && targetPlaces.filter(p => p.url.trim()).length === 0) { toast.error('최소 1개의 플레이스 URL을 입력해주세요.'); return; }
 
-        const finalMethod = (hasPlaceScope || hasCafeSpecific) ? 'hybrid' : crawlingMethod;
         setSaving(true);
         try {
-            const keywords = keywordsStr.split(',').map(k => k.trim()).filter(Boolean);
-            const body = {
-                name, clientId: parseInt(clientId), keywords, monitoringScope: scope,
-                collectCount, isActive, crawlingMethod: finalMethod,
-                targetPlaces: hasPlaceScope ? targetPlaces.filter(p => p.url.trim()) : null,
-                targetCafes: hasCafeSpecific ? targetCafes.filter(c => c.url.trim()) : null,
+            const body: any = {
+                name, templateType, clientId: parseInt(clientId),
+                collectCount: Math.min(collectCount, templateType === 'place' ? 100 : 50),
+                isActive, scheduleEnabled,
+                scheduleCron: scheduleEnabled ? `0 ${scheduleHour} * * *` : null,
             };
+            if (templateType === 'integrated') {
+                body.keywords = keywordsStr.split(',').map((k: string) => k.trim()).filter(Boolean);
+                body.monitoringScope = scope;
+                body.crawlingMethod = hasCafeSpecific ? 'hybrid' : crawlingMethod;
+                body.targetCafes = hasCafeSpecific ? targetCafes.filter(c => c.url.trim()) : null;
+                body.targetPlaces = null;
+            } else {
+                body.keywords = null;
+                body.monitoringScope = [...new Set(targetPlaces.map(p => p.platform === 'kakaomap' ? 'kakaomap' : 'naverplace'))];
+                body.crawlingMethod = 'hybrid';
+                body.targetPlaces = targetPlaces.filter(p => p.url.trim());
+                body.targetCafes = null;
+            }
             const url = isEdit ? `${API}/templates/${template!.id}` : `${API}/templates`;
-            const method = isEdit ? 'PUT' : 'POST';
-            const res = await fetch(url, { method, headers: getHeaders(), body: JSON.stringify(body) });
+            const res = await fetch(url, { method: isEdit ? 'PUT' : 'POST', headers: getHeaders(), body: JSON.stringify(body) });
             const data = await res.json();
             if (data.success) { toast.success(isEdit ? '템플릿 수정 완료!' : '템플릿 생성 완료!'); onSaved(); }
             else toast.error(data.message || '저장 실패');
@@ -479,147 +501,169 @@ const TemplateFormModal = ({ mode, template, clients, onClose, onSaved }: {
 
     const inputCls = "w-full px-3 py-2 bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-violet-500";
 
+    if (step === 'selectType') {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={onClose}>
+                <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">모니터링 타입 선택</h2>
+                        <button onClick={onClose} className="p-1.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"><X size={20} /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => { setTemplateType('integrated'); setStep('form'); }}
+                            className="p-6 rounded-xl border-2 border-[hsl(var(--border))] hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all text-center">
+                            <div className="text-3xl mb-3">{'\ud83d\udd0d'}</div>
+                            <h3 className="font-bold text-[hsl(var(--foreground))] mb-1">통합검색</h3>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))]">블로그, 카페, 뉴스<br/>키워드 기반 API 검색</p>
+                        </button>
+                        <button onClick={() => { setTemplateType('place'); setStep('form'); }}
+                            className="p-6 rounded-xl border-2 border-[hsl(var(--border))] hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-all text-center">
+                            <div className="text-3xl mb-3">{'\ud83c\udfe5'}</div>
+                            <h3 className="font-bold text-[hsl(var(--foreground))] mb-1">플레이스</h3>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))]">네이버/카카오/구글<br/>플레이스 리뷰 크롤링</p>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={onClose}>
             <div className="bg-[hsl(var(--card))] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 z-10 bg-[hsl(var(--card))] px-6 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between rounded-t-2xl">
-                    <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">{isEdit ? '모니터링 템플릿 수정' : '새 모니터링 템플릿'}</h2>
+                    <div className="flex items-center gap-2">
+                        {!isEdit && <button type="button" onClick={() => setStep('selectType')} className="p-1 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">{'\u2190'}</button>}
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${templateType === 'place' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                            {templateType === 'place' ? '\ud83c\udfe5 플레이스' : '\ud83d\udd0d 통합검색'}
+                        </span>
+                        <h2 className="text-lg font-bold text-[hsl(var(--foreground))]">{isEdit ? '템플릿 수정' : '새 템플릿'}</h2>
+                    </div>
                     <button onClick={onClose} className="p-1.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"><X size={20} /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1">템플릿 이름 *</label>
-                        <input value={name} onChange={e => setName(e.target.value)} placeholder="예: A병원 온라인 평판" className={inputCls} />
+                        <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">템플릿 이름 *</label>
+                        <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder={templateType === 'place' ? '예: A병원 네이버 플레이스 리뷰' : '예: A병원 온라인 평판'} />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1">거래처 *</label>
+                        <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">거래처 *</label>
                         <select value={clientId} onChange={e => setClientId(e.target.value)} className={inputCls}>
                             <option value="">선택하세요</option>
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1">키워드 * <span className="text-xs text-[hsl(var(--muted-foreground))]">(쉼표로 구분)</span></label>
-                        <input value={keywordsStr} onChange={e => setKeywordsStr(e.target.value)} placeholder="예: A병원 후기, A병원 리뷰" className={inputCls} />
-                    </div>
 
-                    {/* ========== 모니터링 범위 ========== */}
-                    <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-2">모니터링 범위</label>
-                        <div className="space-y-3">
-                            {/* 네이버 검색 API */}
-                            <div>
-                                <p className="text-xs text-[hsl(var(--muted-foreground))] mb-1.5">🔍 네이버 검색 (API)</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {[{ key: 'blog', label: '블로그' }, { key: 'news', label: '뉴스' }].map(s => (
-                                        <button key={s.key} type="button" onClick={() => toggleScope(s.key)}
-                                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${scope.includes(s.key) ? 'bg-violet-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]'}`}>
-                                            {s.label}
+                    {templateType === 'integrated' && (<>
+                        <div>
+                            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">키워드 * (쉼표로 구분)</label>
+                            <input value={keywordsStr} onChange={e => setKeywordsStr(e.target.value)} className={inputCls} placeholder="예: A병원 후기, A병원 리뷰" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">모니터링 범위</label>
+                            <div className="space-y-2">
+                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))]">\ud83d\udd0d 네이버 검색 (API)</p>
+                                <div className="flex gap-2">
+                                    {['blog', 'news'].map(s => (
+                                        <button key={s} type="button" onClick={() => toggleScope(s)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes(s) ? 'bg-violet-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>
+                                            {s === 'blog' ? '블로그' : '뉴스'}
                                         </button>
                                     ))}
                                 </div>
-                            </div>
-                            {/* 카페 */}
-                            <div>
-                                <p className="text-xs text-[hsl(var(--muted-foreground))] mb-1.5">☕ 카페</p>
-                                <div className="flex flex-wrap gap-2">
-                                    <button type="button" onClick={() => toggleScope('cafe')}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${scope.includes('cafe') ? 'bg-violet-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]'}`}>
-                                        전체 검색
-                                    </button>
-                                    <button type="button" onClick={() => toggleScope('cafe_specific')}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${scope.includes('cafe_specific') ? 'bg-emerald-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]'}`}>
-                                        📌 지정 카페
-                                    </button>
+                                <p className="text-xs font-medium text-[hsl(var(--muted-foreground))] mt-2">\u2615 카페</p>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => { toggleScope('cafe'); if (scope.includes('cafe_specific')) setScope(prev => prev.filter(x => x !== 'cafe_specific')); }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes('cafe') ? 'bg-violet-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>전체 검색</button>
+                                    <button type="button" onClick={() => { toggleScope('cafe_specific'); if (scope.includes('cafe')) setScope(prev => prev.filter(x => x !== 'cafe')); }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${scope.includes('cafe_specific') ? 'bg-emerald-600 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`}>\ud83d\udccc 지정 카페</button>
                                 </div>
                                 {hasCafeSpecific && (
-                                    <div className="mt-2 space-y-2 pl-3 border-l-2 border-emerald-300 dark:border-emerald-700">
-                                        {targetCafes.map((cafe, i) => (
-                                            <div key={i} className="flex gap-2 items-center">
-                                                <input value={cafe.url} onChange={e => updateCafe(i, 'url', e.target.value)} placeholder="https://cafe.naver.com/카페명" className={`flex-1 ${inputCls} !py-1.5 !text-xs`} />
-                                                <input value={cafe.name || ''} onChange={e => updateCafe(i, 'name', e.target.value)} placeholder="별칭" className={`w-24 ${inputCls} !py-1.5 !text-xs`} />
-                                                <button type="button" onClick={() => removeCafe(i)} className="p-1 text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+                                    <div className="ml-2 space-y-2 mt-2">
+                                        {targetCafes.map((c, i) => (
+                                            <div key={i} className="flex items-center gap-2">
+                                                <input value={c.url} onChange={e => updateCafe(i, 'url', e.target.value)} className={`${inputCls} flex-1`} placeholder="카페 URL" />
+                                                <input value={c.name || ''} onChange={e => updateCafe(i, 'name', e.target.value)} className="w-20 px-2 py-2 bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg text-xs" placeholder="별칭" />
+                                                <button type="button" onClick={() => removeCafe(i)} className="text-red-400 hover:text-red-600"><X size={16} /></button>
                                             </div>
                                         ))}
-                                        <button type="button" onClick={addCafe} className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium">+ 카페 URL 추가</button>
-                                    </div>
-                                )}
-                            </div>
-                            {/* 플레이스 */}
-                            <div>
-                                <p className="text-xs text-[hsl(var(--muted-foreground))] mb-1.5">🏥 플레이스 리뷰 (크롤링)</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {[{ key: 'naverplace', label: '네이버 플레이스' }, { key: 'kakaomap', label: '카카오맵' }].map(s => (
-                                        <button key={s.key} type="button" onClick={() => {
-                                            toggleScope(s.key);
-                                            if (!scope.includes(s.key) && !targetPlaces.some(p => p.platform === s.key)) {
-                                                addPlace(s.key);
-                                            }
-                                        }}
-                                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${scope.includes(s.key) ? 'bg-orange-500 text-white' : 'bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]'}`}>
-                                            {s.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {hasPlaceScope && (
-                                    <div className="mt-2 space-y-2 pl-3 border-l-2 border-orange-300 dark:border-orange-700">
-                                        {targetPlaces.map((place, i) => (
-                                            <div key={i} className="flex gap-2 items-center">
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${place.platform === 'naverplace' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
-                                                    {place.platform === 'naverplace' ? 'N' : 'K'}
-                                                </span>
-                                                <input value={place.url} onChange={e => updatePlace(i, 'url', e.target.value)}
-                                                    placeholder={place.platform === 'naverplace' ? 'https://map.naver.com/p/entry/place/123456' : 'https://place.map.kakao.com/123456'}
-                                                    className={`flex-1 ${inputCls} !py-1.5 !text-xs`} />
-                                                <button type="button" onClick={() => removePlace(i)} className="p-1 text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
-                                            </div>
-                                        ))}
-                                        <div className="flex gap-3">
-                                            {scope.includes('naverplace') && <button type="button" onClick={() => addPlace('naverplace')} className="text-xs text-green-600 dark:text-green-400 hover:underline font-medium">+ 네이버 플레이스</button>}
-                                            {scope.includes('kakaomap') && <button type="button" onClick={() => addPlace('kakaomap')} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline font-medium">+ 카카오맵</button>}
-                                        </div>
+                                        <button type="button" onClick={addCafe} className="text-xs text-emerald-600 hover:underline">+ 카페 URL 추가</button>
                                     </div>
                                 )}
                             </div>
                         </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">수집 방식</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[{ val: 'api', label: 'API', desc: '빠르고 안정적' }, { val: 'hybrid', label: 'API + 크롤링', desc: '본문 보강 포함' }].map(m => (
+                                    <button key={m.val} type="button" onClick={() => setCrawlingMethod(m.val)}
+                                        className={`p-3 rounded-xl border-2 text-center text-xs transition-all ${crawlingMethod === m.val ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-[hsl(var(--border))]'}`}>
+                                        <span className="font-bold block">{m.label}</span><span className="text-[hsl(var(--muted-foreground))]">{m.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>)}
+
+                    {templateType === 'place' && (
+                        <div>
+                            <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-2">플레이스 URL *</label>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">리뷰를 수집할 플레이스 페이지 URL을 입력하세요.</p>
+                            <div className="space-y-3">
+                                {targetPlaces.map((p, i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                        <span className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold text-white shrink-0 ${p.platform === 'kakaomap' ? 'bg-yellow-500' : p.platform === 'googleplace' ? 'bg-blue-500' : 'bg-green-500'}`}>
+                                            {p.platform === 'kakaomap' ? 'K' : p.platform === 'googleplace' ? 'G' : 'N'}
+                                        </span>
+                                        <input value={p.url} onChange={e => updatePlace(i, 'url', e.target.value)} className={`${inputCls} flex-1`}
+                                            placeholder={p.platform === 'kakaomap' ? 'https://place.map.kakao.com/...' : 'https://map.naver.com/p/entry/place/...'} />
+                                        <input value={p.name || ''} onChange={e => updatePlace(i, 'name', e.target.value)} className="w-24 px-2 py-2 bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg text-xs" placeholder="별칭" />
+                                        <button type="button" onClick={() => removePlace(i)} className="text-red-400 hover:text-red-600"><X size={16} /></button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <button type="button" onClick={() => addPlace('naverplace')} className="text-xs text-green-600 hover:underline font-medium">+ 네이버 플레이스</button>
+                                <button type="button" onClick={() => addPlace('kakaomap')} className="text-xs text-yellow-600 hover:underline font-medium">+ 카카오맵</button>
+                                <button type="button" onClick={() => addPlace('googleplace')} className="text-xs text-blue-600 hover:underline font-medium">+ 구글 플레이스</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-semibold text-[hsl(var(--foreground))] mb-1">
+                            수집 개수: <span className="text-violet-600">{collectCount}개</span>
+                            <span className="text-xs text-[hsl(var(--muted-foreground))] ml-2">(최대 {templateType === 'place' ? 100 : 50}개)</span>
+                        </label>
+                        <input type="range" min={5} max={templateType === 'place' ? 100 : 50} step={5} value={collectCount}
+                            onChange={e => setCollectCount(parseInt(e.target.value))} className="w-full accent-violet-600" />
+                        <div className="flex justify-between text-xs text-[hsl(var(--muted-foreground))]"><span>5개</span><span>{templateType === 'place' ? '100개' : '50개'}</span></div>
                     </div>
 
-                    {/* 수집 방식 */}
-                    <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1">수집 방식</label>
-                        <div className="flex gap-2">
-                            {[
-                                { key: 'api', label: 'API', desc: '빠르고 안정적' },
-                                { key: 'hybrid', label: 'API + 크롤링', desc: '본문 보강 포함' },
-                            ].map(m => (
-                                <button key={m.key} type="button" onClick={() => setCrawlingMethod(m.key)}
-                                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all border-2 text-center ${(crawlingMethod === m.key || (m.key === 'hybrid' && (hasPlaceScope || hasCafeSpecific))) ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-violet-300'}`}>
-                                    <div className="font-semibold">{m.label}</div>
-                                    <div className="text-[10px] mt-0.5 opacity-70">{m.desc}</div>
-                                </button>
-                            ))}
+                    <div className="border border-[hsl(var(--border))] rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-semibold text-[hsl(var(--foreground))]">\ud83d\udd50 자동 실행</label>
+                            <button type="button" onClick={() => setScheduleEnabled(!scheduleEnabled)}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${scheduleEnabled ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${scheduleEnabled ? 'left-[22px]' : 'left-0.5'}`} />
+                            </button>
                         </div>
-                        {(hasPlaceScope || hasCafeSpecific) && (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">ℹ️ 플레이스/지정카페 선택 시 자동으로 크롤링 모드 적용</p>
+                        {scheduleEnabled && (
+                            <div className="mt-3">
+                                <label className="block text-xs text-[hsl(var(--muted-foreground))] mb-1">매일 실행 시간</label>
+                                <select value={scheduleHour} onChange={e => setScheduleHour(parseInt(e.target.value))} className={inputCls}>
+                                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                                </select>
+                                <p className="text-xs text-violet-600 mt-1">매일 {String(scheduleHour).padStart(2, '0')}:00에 자동 실행됩니다</p>
+                            </div>
                         )}
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1">수집 개수</label>
-                        <input type="number" value={collectCount} onChange={e => setCollectCount(parseInt(e.target.value) || 10)} min={5} max={100} className={inputCls} />
-                    </div>
-                    {isEdit && (
-                        <div className="flex items-center gap-3">
-                            <label className="text-sm font-medium text-[hsl(var(--foreground))]">활성 상태</label>
-                            <button type="button" onClick={() => setIsActive(!isActive)} className={`w-10 h-6 rounded-full transition-colors relative ${isActive ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isActive ? 'left-5' : 'left-1'}`} />
-                            </button>
-                            <span className="text-xs text-[hsl(var(--muted-foreground))]">{isActive ? '활성' : '비활성'}</span>
-                        </div>
-                    )}
                     <div className="flex gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-[hsl(var(--border))] rounded-lg text-sm font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">취소</button>
-                        <button type="submit" disabled={saving} className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 disabled:opacity-50">{saving ? '저장중...' : (isEdit ? '수정' : '생성')}</button>
+                        <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-[hsl(var(--border))] rounded-xl text-sm font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">취소</button>
+                        <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50">
+                            {saving ? '저장 중...' : isEdit ? '수정' : '생성'}
+                        </button>
                     </div>
                 </form>
             </div>
