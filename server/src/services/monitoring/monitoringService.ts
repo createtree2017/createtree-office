@@ -4,6 +4,8 @@ import { eq, and, desc, inArray } from "drizzle-orm";
 import { NaverCollector } from "./naverCollector.js";
 import { ContentCrawler } from "./contentCrawler.js";
 import { PlaceCrawler } from "./placeCrawler.js";
+import { GooglePlaceCollector } from "./googlePlaceCollector.js";
+import { VisionCrawler } from "./visionCrawler.js";
 import { SentimentAnalyzer } from "./sentimentAnalyzer.js";
 import { ReportGenerator } from "./reportGenerator.js";
 import type { MonitoringTemplate, MonitoringResult, CrawlOptions } from "./types.js";
@@ -17,6 +19,8 @@ export class MonitoringService {
     private naverCollector: NaverCollector;
     private contentCrawler: ContentCrawler;
     private placeCrawler: PlaceCrawler;
+    private googlePlaceCollector: GooglePlaceCollector;
+    private visionCrawler: VisionCrawler;
     private analyzer: SentimentAnalyzer;
     private reportGenerator: ReportGenerator;
 
@@ -24,6 +28,8 @@ export class MonitoringService {
         this.naverCollector = new NaverCollector();
         this.contentCrawler = new ContentCrawler();
         this.placeCrawler = new PlaceCrawler();
+        this.googlePlaceCollector = new GooglePlaceCollector();
+        this.visionCrawler = new VisionCrawler();
         this.analyzer = new SentimentAnalyzer();
         this.reportGenerator = new ReportGenerator();
     }
@@ -131,16 +137,21 @@ export class MonitoringService {
                 } else {
                     try {
                         for (const place of targetPlaces) {
-                            const placeId = this.extractPlaceId(place.url, place.platform);
-                            console.log(`🔍 플레이스 ID 추출: ${place.url} → ${placeId} (${place.platform})`);
-                            if (!placeId) { console.warn(`⚠️ 플레이스 ID 추출 실패: ${place.url}`); continue; }
-
                             let reviews: any[] = [];
-                            if (place.platform === 'naverplace') {
+
+                            if (place.platform === 'kakaomap' || place.platform === 'googleplace') {
+                                // 비주얼 스크래핑 — URL로 직접 접속 (placeId 불필요)
+                                console.log(`📸 비주얼 스크래핑: ${place.url} (${place.platform})`);
+                                reviews = await this.visionCrawler.crawlByVision(
+                                    place.url, place.platform as "kakaomap" | "googleplace", template.collectCount
+                                );
+                            } else if (place.platform === 'naverplace') {
+                                const placeId = this.extractPlaceId(place.url, place.platform);
+                                console.log(`🔍 플레이스 ID 추출: ${place.url} → ${placeId} (${place.platform})`);
+                                if (!placeId) { console.warn(`⚠️ 플레이스 ID 추출 실패: ${place.url}`); continue; }
                                 reviews = await this.placeCrawler.crawlNaverPlace(placeId, template.collectCount);
-                            } else if (place.platform === 'kakaomap') {
-                                reviews = await this.placeCrawler.crawlKakaoMap(placeId, template.collectCount);
                             }
+
                             posts = [...posts, ...reviews];
                             console.log(`✅ ${place.platform} 리뷰 ${reviews.length}개 수집`);
                         }
