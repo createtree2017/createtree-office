@@ -1119,7 +1119,7 @@ const TemplateFormModal = ({
         body.monitoringScope = [
           ...new Set(
             targetPlaces.map((p) =>
-              p.platform === "kakaomap" ? "kakaomap" : "naverplace",
+              p.platform === "kakaomap" ? "kakaomap" : p.platform === "googleplace" ? "googleplace" : "naverplace",
             ),
           ),
         ];
@@ -1492,7 +1492,9 @@ const TemplateFormModal = ({
                       placeholder={
                         p.platform === "kakaomap"
                           ? "https://place.map.kakao.com/..."
-                          : "https://map.naver.com/p/entry/place/..."
+                          : p.platform === "googleplace"
+                            ? "https://maps.google.com/maps/place/..."
+                            : "https://map.naver.com/p/entry/place/..."
                       }
                     />
                     <input

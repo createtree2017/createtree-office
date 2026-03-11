@@ -9,8 +9,8 @@ export interface PostData {
     publishedAt: string;   // 리뷰 작성일 (created)
     visitedAt?: string;    // 방문일 (visitedDate) - 플레이스 전용
     url: string;
-    platform: "naver" | "google" | "daum" | "kakao";
-    source?: "blog" | "cafe" | "cafe_specific" | "news" | "place" | "naverplace" | "kakaomap";
+    platform: "naver" | "google" | "daum" | "kakao";  // google = 구글 플레이스(Outscraper)
+    source?: "blog" | "cafe" | "cafe_specific" | "news" | "place" | "naverplace" | "kakaomap" | "googleplace";
     sentiment?: "positive" | "neutral" | "negative";
     sentimentScore?: number;
     comments?: string[];
