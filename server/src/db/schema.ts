@@ -104,7 +104,7 @@ export const monitoringTemplates = pgTable("monitoring_templates", {
     dateRange: integer("date_range").default(7).notNull(),
     collectCount: integer("collect_count").default(10).notNull(),
     crawlingMethod: text("crawling_method").default("api").notNull(),
-    targetPlaces: jsonb("target_places").$type<Array<{ platform: string; url: string; name?: string }>>(),
+    targetPlaces: jsonb("target_places").$type<Array<{ platform: string; url: string; name?: string; sortOrder?: string }>>(),
     targetCafes: jsonb("target_cafes").$type<Array<{ url: string; name?: string }>>(),
     scheduleEnabled: boolean("schedule_enabled").default(false).notNull(),
     scheduleCron: text("schedule_cron"), // cron expression, 예: '0 9 * * *' (매일 9시)

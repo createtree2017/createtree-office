@@ -141,9 +141,10 @@ export class MonitoringService {
 
                             if (place.platform === 'kakaomap' || place.platform === 'googleplace') {
                                 // 비주얼 스크래핑 — URL로 직접 접속 (placeId 불필요)
-                                console.log(`📸 비주얼 스크래핑: ${place.url} (${place.platform})`);
+                                const sortOrder = (place.sortOrder === 'latest' ? 'latest' : 'relevant') as "latest" | "relevant";
+                                console.log(`📸 비주얼 스크래핑: ${place.url} (${place.platform}, 정렬: ${sortOrder})`);
                                 reviews = await this.visionCrawler.crawlByVision(
-                                    place.url, place.platform as "kakaomap" | "googleplace", template.collectCount
+                                    place.url, place.platform as "kakaomap" | "googleplace", template.collectCount, sortOrder
                                 );
                             } else if (place.platform === 'naverplace') {
                                 const placeId = this.extractPlaceId(place.url, place.platform);

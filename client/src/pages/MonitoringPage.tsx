@@ -46,7 +46,7 @@ interface Template {
   scheduleCron?: string | null;
   scheduleLastRunAt?: string | null;
   createdAt: string;
-  targetPlaces?: Array<{ platform: string; url: string; name?: string }>;
+  targetPlaces?: Array<{ platform: string; url: string; name?: string; sortOrder?: string }>;
   targetCafes?: Array<{ url: string; name?: string }>;
 }
 interface Result {
@@ -1043,7 +1043,7 @@ const TemplateFormModal = ({
     Array<{ url: string; name?: string }>
   >(template?.targetCafes || []);
   const [targetPlaces, setTargetPlaces] = useState<
-    Array<{ platform: string; url: string; name?: string }>
+    Array<{ platform: string; url: string; name?: string; sortOrder?: string }>
   >(template?.targetPlaces || []);
   const [scheduleEnabled, setScheduleEnabled] = useState(
     template?.scheduleEnabled || false,
@@ -1151,7 +1151,7 @@ const TemplateFormModal = ({
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
     );
   const addPlace = (platform: string) =>
-    setTargetPlaces((prev) => [...prev, { platform, url: "", name: "" }]);
+    setTargetPlaces((prev) => [...prev, { platform, url: "", name: "", sortOrder: "latest" }]);
   const removePlace = (idx: number) =>
     setTargetPlaces((prev) => prev.filter((_, i) => i !== idx));
   const updatePlace = (idx: number, field: string, value: string) =>
@@ -1503,6 +1503,16 @@ const TemplateFormModal = ({
                       className="w-24 px-2 py-2 bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg text-xs"
                       placeholder="별칭"
                     />
+                    {(p.platform === 'kakaomap' || p.platform === 'googleplace') && (
+                      <select
+                        value={p.sortOrder || 'relevant'}
+                        onChange={(e) => updatePlace(i, 'sortOrder', e.target.value)}
+                        className="w-20 px-1 py-2 bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg text-xs"
+                      >
+                        <option value="latest">최신순</option>
+                        <option value="relevant">정확도순</option>
+                      </select>
+                    )}
                     <button
                       type="button"
                       onClick={() => removePlace(i)}
