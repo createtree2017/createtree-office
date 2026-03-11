@@ -25,7 +25,8 @@ export class VisionCrawler {
     async crawlByVision(
         url: string,
         platform: "kakaomap" | "googleplace",
-        maxReviews: number = 10
+        maxReviews: number = 10,
+        sortOrder: "latest" | "relevant" = "relevant"
     ): Promise<PostData[]> {
         console.log(`📸 비주얼 스크래핑 시작: platform=${platform}, url=${url}`);
 
@@ -36,7 +37,7 @@ export class VisionCrawler {
 
         try {
             // 1. 스크린샷 캡처
-            const screenshot = await this.captureReviewPage(url, platform, maxReviews);
+            const screenshot = await this.captureReviewPage(url, platform, maxReviews, sortOrder);
             if (!screenshot) {
                 console.error("❌ 스크린샷 캡처 실패");
                 return [];
@@ -60,7 +61,7 @@ export class VisionCrawler {
      * Playwright로 리뷰 페이지 접속 + 스크린샷 캡처
      * viewport 높이를 maxReviews에 따라 자동 조절하여 원하는 수의 리뷰를 캡처
      */
-    private async captureReviewPage(url: string, platform: string, maxReviews: number = 10): Promise<Buffer | null> {
+    private async captureReviewPage(url: string, platform: string, maxReviews: number = 10, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         try {
             // 리뷰 1개 ≈ 300px (카카오맵 기준), 상단 헤더 ≈ 400px
             // maxReviews에 따라 viewport 높이 자동 계산
@@ -93,7 +94,7 @@ export class VisionCrawler {
             const page = await context.newPage();
 
             if (platform === "kakaomap") {
-                return await this.captureKakaoMap(page, url, maxReviews);
+                return await this.captureKakaoMap(page, url, maxReviews, sortOrder);
             } else if (platform === "googleplace") {
                 return await this.captureGooglePlace(page, url, maxReviews);
             }
@@ -110,7 +111,7 @@ export class VisionCrawler {
      * - '더보기' 버튼 반복 클릭으로 리뷰 로드
      * - viewport 높이에 맞춰 리뷰 ~maxReviews개 캡처
      */
-    private async captureKakaoMap(page: Page, url: string, maxReviews: number): Promise<Buffer | null> {
+    private async captureKakaoMap(page: Page, url: string, maxReviews: number, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         console.log("🗺️ 카카오맵 페이지 접속 중...");
 
         // 리뷰 탭이 포함된 URL로 접속 (#comment 해시)
@@ -131,23 +132,26 @@ export class VisionCrawler {
             // 후기 탭이 없으면 무시 (이미 리뷰 화면일 수 있음)
         }
 
-        // 정렬을 '최신순'으로 변경 (기본: 유용한 순)
-        try {
-            // 정렬 드롭다운 클릭
-            const sortBtn = page.locator('.link_sort, button:has-text("유용한 순"), a:has-text("유용한 순")').first();
-            if (await sortBtn.isVisible({ timeout: 2000 })) {
-                await sortBtn.click();
-                await page.waitForTimeout(500);
-                // '최신순' 옵션 클릭
-                const newestOption = page.locator('a:has-text("최신순"), button:has-text("최신순"), li:has-text("최신순")').first();
-                if (await newestOption.isVisible({ timeout: 2000 })) {
-                    await newestOption.click();
-                    console.log("📅 정렬: 최신순으로 변경");
-                    await page.waitForTimeout(2000); // 리뷰 재로딩 대기
+        // 정렬 변경 (sortOrder에 따라: 'latest' = 최신 순, 'relevant' = 유용한 순)
+        // 기본값은 '유용한 순'이므로, 'latest'일 때만 변경 필요
+        if (sortOrder === 'latest') {
+            try {
+                // 정렬 드롭다운 토글 버튼 (button.btn_sort)
+                const sortBtn = page.locator('button.btn_sort').first();
+                if (await sortBtn.isVisible({ timeout: 2000 })) {
+                    await sortBtn.click();
+                    await page.waitForTimeout(500);
+                    // '최신 순' 옵션 클릭 (카카오맵은 "최신 순" 띄어쓰기 있음)
+                    const newestOption = page.locator('a.link_sort:has-text("최신 순")').first();
+                    if (await newestOption.isVisible({ timeout: 2000 })) {
+                        await newestOption.click();
+                        console.log("📅 정렬: 최신 순으로 변경");
+                        await page.waitForTimeout(2000); // 리뷰 재로딩 대기
+                    }
                 }
+            } catch {
+                console.log("⚠️ 정렬 변경 실패 — 기본 정렬로 진행");
             }
-        } catch {
-            console.log("⚠️ 정렬 변경 실패 — 기본 정렬로 진행");
         }
 
         // '더보기' 버튼 클릭 → 리뷰 추가 로드

@@ -73,7 +73,7 @@ export interface MonitoringTemplate {
     dateRange: number;
     collectCount: number;
     crawlingMethod: string;
-    targetPlaces: Array<{ platform: string; url: string; name?: string }> | null;
+    targetPlaces: Array<{ platform: string; url: string; name?: string; sortOrder?: string }> | null;
     targetCafes: Array<{ url: string; name?: string }> | null;
     scheduleEnabled: boolean;
     scheduleCron: string | null;
