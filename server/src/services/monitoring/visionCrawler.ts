@@ -1,6 +1,8 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { GoogleGenAI } from "@google/genai";
 import type { PostData } from "./types.js";
+import fs from "fs";
+import path from "path";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
@@ -43,6 +45,13 @@ export class VisionCrawler {
                 return [];
             }
             console.log(`📷 스크린샷 캡처 완료 (${(screenshot.length / 1024).toFixed(1)}KB)`);
+
+            // 디버그: 스크린샷을 /tmp에 저장 (캡처 내용 확인용)
+            try {
+                const debugPath = `/tmp/debug_${platform}_${Date.now()}.png`;
+                fs.writeFileSync(debugPath, screenshot);
+                console.log(`🔍 디버그 스크린샷 저장: ${debugPath}`);
+            } catch { /* 저장 실패 무시 */ }
 
             // 2. Gemini Vision으로 리뷰 추출
             const posts = await this.extractReviewsFromImage(screenshot, platform, url, maxReviews);
@@ -222,29 +231,61 @@ export class VisionCrawler {
     private async captureGooglePlace(page: Page, url: string, maxReviews: number, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         console.log("🌍 구글 플레이스 페이지 접속 중...");
 
-        await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-        await page.waitForTimeout(3000);
+        // domcontentloaded로 변경 — networkidle은 구글 맵에서 안정적이지 않음
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        // 구글 맵은 JS 렌더링이 필요하므로 넉넉히 대기
+        await page.waitForTimeout(5000);
 
-        // 쿠키 동의 팝업 닫기 (있으면)
+        // 디버그: 현재 page title과 URL 확인
+        const pageTitle = await page.title();
+        const currentUrl = page.url();
+        console.log(`🔍 [디버그] 페이지 Title: "${pageTitle}", URL: ${currentUrl}`);
+
+        // 쿠키 동의 팝업 닫기 (있으면 — 구글 서비스 첫 진입 시 나타남)
         try {
-            const acceptBtn = page.locator('button:has-text("모두 수락"), button:has-text("Accept all"), button:has-text("동의")').first();
-            if (await acceptBtn.isVisible({ timeout: 2000 })) {
+            const acceptBtn = page.locator('button:has-text("모두 수락"), button:has-text("Accept all"), button:has-text("동의"), form[action*="consent"] button').first();
+            if (await acceptBtn.isVisible({ timeout: 3000 })) {
                 await acceptBtn.click();
-                await page.waitForTimeout(1000);
+                console.log("🍪 쿠키 동의 팝업 닫기 완료");
+                await page.waitForTimeout(2000);
             }
         } catch { /* 무시 */ }
 
-        // "리뷰" 탭 클릭 시도 (URL 파라미터로 이미 리뷰 탭일 수 있지만, 확실히 보장)
+        // 디버그: 로드 직후 전체 페이지 스크린샷 저장
+        try {
+            const debugInitial = await page.screenshot({ type: "png", fullPage: false });
+            fs.writeFileSync(`/tmp/debug_gp_initial_${Date.now()}.png`, debugInitial);
+            console.log(`🔍 [디버그] 초기 페이지 스크린샷 저장 완료`);
+        } catch { /* 무시 */ }
+
+        // "리뷰" 탭 클릭 시도
         try {
             const reviewTab = page.locator('button[role="tab"][aria-label*="리뷰"], button[role="tab"]:has-text("리뷰")').first();
             if (await reviewTab.isVisible({ timeout: 3000 })) {
                 await reviewTab.click();
                 console.log("📑 리뷰 탭 클릭 완료");
-                await page.waitForTimeout(2000);
+                await page.waitForTimeout(3000);
+            } else {
+                console.log("⚠️ 리뷰 탭을 찾지 못함 — URL 파라미터로 리뷰 표시 기대");
             }
         } catch {
-            console.log("⚠️ 리뷰 탭 클릭 실패 — URL 파라미터로 리뷰 표시 기대");
+            console.log("⚠️ 리뷰 탭 클릭 실패");
         }
+
+        // 디버그: 리뷰 관련 DOM 요소 존재 확인
+        const domInfo = await page.evaluate(() => {
+            const mainPanel = document.querySelector('div[role="main"]');
+            const reviews = document.querySelectorAll('div.jftiEf');
+            const scrollable = document.querySelector('div.m6QErb.DxyBCb');
+            return {
+                hasMainPanel: !!mainPanel,
+                mainPanelSize: mainPanel ? { w: mainPanel.clientWidth, h: mainPanel.clientHeight } : null,
+                reviewCount: reviews.length,
+                hasScrollable: !!scrollable,
+                bodyText: document.body.innerText.substring(0, 500), // 페이지 텍스트 앞부분 (리다이렉트/에러 페이지 확인용)
+            };
+        });
+        console.log(`🔍 [디버그] DOM 분석:`, JSON.stringify(domInfo));
 
         // 정렬 변경 (sortOrder === 'latest'이면 최신순으로)
         if (sortOrder === 'latest') {
@@ -253,8 +294,6 @@ export class VisionCrawler {
                 if (await sortBtn.isVisible({ timeout: 3000 })) {
                     await sortBtn.click();
                     await page.waitForTimeout(1000);
-
-                    // 최신순 옵션 클릭 (메뉴의 두 번째 항목)
                     const newestOption = page.locator('div[role="menuitemradio"]:nth-child(2), div[role="menuitemradio"]:has-text("최신순")').first();
                     if (await newestOption.isVisible({ timeout: 2000 })) {
                         await newestOption.click();
@@ -268,58 +307,80 @@ export class VisionCrawler {
         }
 
         // 사이드 패널 내부 스크롤로 리뷰 추가 로드
-        // 구글 맵은 패널 내부 스크롤로 리뷰를 무한 로드함
-        const scrollContainer = 'div.m6QErb.DxyBCb.kA9KIf.dS8AEf';
-        const scrollContainerFallback = 'div[role="main"] div[tabindex="-1"]';
+        const scrollSelectors = [
+            'div.m6QErb.DxyBCb.kA9KIf.dS8AEf',
+            'div.m6QErb.DxyBCb',
+            'div[role="main"] div.e07Vkf',
+            'div[role="main"] div[tabindex="-1"]',
+        ];
 
         if (maxReviews > 5) {
-            const scrollCount = Math.ceil(maxReviews / 5); // 한 번 스크롤에 약 3~5개 로드 추정
+            const scrollCount = Math.ceil(maxReviews / 5);
             console.log(`📜 패널 내부 스크롤 ${scrollCount}회 시도...`);
 
             for (let i = 0; i < scrollCount; i++) {
                 try {
-                    const scrolled = await page.evaluate((selectors) => {
-                        const { primary, fallback } = selectors;
-                        const container = document.querySelector(primary) || document.querySelector(fallback);
-                        if (container) {
-                            container.scrollTop += 1000;
-                            return true;
+                    const scrollResult = await page.evaluate((selectors) => {
+                        for (const sel of selectors) {
+                            const el = document.querySelector(sel);
+                            if (el && el.scrollHeight > el.clientHeight) {
+                                el.scrollTop += 1000;
+                                return { scrolled: true, selector: sel };
+                            }
                         }
-                        return false;
-                    }, { primary: scrollContainer, fallback: scrollContainerFallback });
+                        // 폴백: 메인 패널 자체를 스크롤
+                        const main = document.querySelector('div[role="main"]');
+                        if (main) {
+                            main.scrollTop += 1000;
+                            return { scrolled: true, selector: 'div[role="main"] (fallback)' };
+                        }
+                        return { scrolled: false, selector: 'none' };
+                    }, scrollSelectors);
 
-                    if (!scrolled) {
+                    if (!scrollResult.scrolled) {
                         console.log("⚠️ 스크롤 컨테이너를 찾지 못함 — 스크롤 중단");
                         break;
                     }
-                    await page.waitForTimeout(1500); // 새 리뷰 로딩 대기
+                    if (i === 0) console.log(`📜 스크롤 컨테이너: ${scrollResult.selector}`);
+                    await page.waitForTimeout(1500);
                 } catch { break; }
             }
 
-            // 캡처 전 스크롤을 맨 위로 복원 (전체 리뷰를 보여주기 위해)
+            // 스크롤을 맨 위로 복원
             try {
                 await page.evaluate((selectors) => {
-                    const { primary, fallback } = selectors;
-                    const container = document.querySelector(primary) || document.querySelector(fallback);
-                    if (container) container.scrollTop = 0;
-                }, { primary: scrollContainer, fallback: scrollContainerFallback });
+                    for (const sel of selectors) {
+                        const el = document.querySelector(sel);
+                        if (el) { el.scrollTop = 0; break; }
+                    }
+                }, scrollSelectors);
                 await page.waitForTimeout(500);
             } catch { /* 무시 */ }
         }
 
         // 사이드 패널 요소만 정조준 캡처 (지도 영역 제외)
-        try {
-            const panel = page.locator('div[role="main"]').first();
-            if (await panel.isVisible({ timeout: 3000 })) {
-                const screenshot = await panel.screenshot({ type: "png" });
-                console.log("📸 사이드 패널 정조준 캡처 완료");
-                return Buffer.from(screenshot);
-            }
-        } catch (err: any) {
-            console.warn(`⚠️ 패널 정조준 캡처 실패, 전체 페이지 캡처로 폴백: ${err.message}`);
+        // 다단계 셀렉터로 시도
+        const panelSelectors = [
+            'div[role="main"]',
+            'div.m6QErb',
+            '#QA0Szd',
+        ];
+
+        for (const sel of panelSelectors) {
+            try {
+                const panel = page.locator(sel).first();
+                if (await panel.isVisible({ timeout: 2000 })) {
+                    const box = await panel.boundingBox();
+                    if (box && box.width > 100 && box.height > 100) {
+                        const screenshot = await panel.screenshot({ type: "png" });
+                        console.log(`📸 패널 캡처 완료 (셀렉터: ${sel}, ${box.width}×${box.height}px)`);
+                        return Buffer.from(screenshot);
+                    }
+                }
+            } catch { continue; }
         }
 
-        // 폴백: 전체 페이지 스크린샷
+        console.warn("⚠️ 모든 패널 셀렉터 실패 — 전체 페이지 캡처로 폴백");
         const screenshot = await page.screenshot({
             type: "png",
             fullPage: false,
