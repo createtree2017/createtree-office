@@ -406,14 +406,24 @@ const AdminPage = () => {
                                 등록된 병원 목록
                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs px-2.5 py-0.5 rounded-full font-bold">{clients.length}</span>
                             </h3>
-                            <button
-                                onClick={handleSyncClients}
-                                disabled={syncingClients}
-                                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                            >
-                                <span className={syncingClients ? "animate-spin" : ""}>🔄</span>
-                                {syncingClients ? "동기화 중..." : "구글 드라이브 목록 새로고침"}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href="https://t.me/createtree_bot"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-4 py-2 bg-sky-50 hover:bg-sky-100 dark:bg-sky-500/10 dark:hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded-xl text-sm font-bold transition-all"
+                                >
+                                    🤖 챗봇 등록하기
+                                </a>
+                                <button
+                                    onClick={handleSyncClients}
+                                    disabled={syncingClients}
+                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                                >
+                                    <span className={syncingClients ? "animate-spin" : ""}>🔄</span>
+                                    {syncingClients ? "동기화 중..." : "구글 드라이브 목록 새로고침"}
+                                </button>
+                            </div>
                         </div>
 
                         {/* 병원 리스트 */}
