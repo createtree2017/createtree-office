@@ -280,22 +280,39 @@ export class VisionCrawler {
     private async captureGooglePlace(page: Page, url: string, maxReviews: number, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         console.log("🔍 구글 통합검색 리뷰 방식으로 접속...");
 
-        // 1. URL 판별: 이미 구글 검색 URL이면 그대로 사용, 구글 맵 URL이면 검색 URL 생성
-        let targetUrl = url;
-        if (url.includes("google.com/search")) {
-            // 이미 구글 검색 URL → 그대로 사용
-            console.log("🔗 구글 검색 URL 직접 사용");
-        } else if (url.includes("google.com/maps")) {
-            // 구글 맵 URL → 장소명 추출 후 검색 URL 생성
-            const placeName = this.extractPlaceNameFromUrl(url);
-            if (!placeName) {
-                console.error("❌ URL에서 장소명을 추출할 수 없습니다:", url);
-                return null;
+        // 1. URL에서 검색어(q=) 파라미터만 추출하여 깨끗한 URL 생성
+        //    사용자 URL에는 sxsrf, si, ved 등 세션 토큰이 포함되어 있는데,
+        //    이것들은 원래 브라우저 세션에 묶여있어 headless에서 접속 시 구글이 거부함
+        let targetUrl: string;
+        
+        try {
+            const urlObj = new URL(url);
+            const query = urlObj.searchParams.get("q");
+            
+            if (query) {
+                // q= 파라미터가 있으면 깨끗한 검색 URL로 재구성
+                targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ko`;
+                console.log(`🔗 검색어 추출: "${query}" → 클린 URL 생성`);
+            } else if (url.includes("google.com/maps")) {
+                // 구글 맵 URL → 장소명 추출
+                const placeName = this.extractPlaceNameFromUrl(url);
+                if (!placeName) {
+                    console.error("❌ URL에서 장소명을 추출할 수 없습니다:", url);
+                    return null;
+                }
+                targetUrl = `https://www.google.com/search?q=${encodeURIComponent(placeName + " 리뷰")}&hl=ko`;
+                console.log(`🔗 맵 URL → 검색어: "${placeName} 리뷰"`);
+            } else {
+                // 기타 URL 그대로 사용
+                targetUrl = url;
+                console.log("🔗 URL 그대로 사용");
             }
-            console.log(`🏥 장소명 추출: "${placeName}"`);
-            targetUrl = `https://www.google.com/search?q=${encodeURIComponent(placeName + " 리뷰")}&hl=ko`;
+        } catch {
+            targetUrl = url;
+            console.log("🔗 URL 파싱 실패 — 그대로 사용");
         }
-        console.log(`🔗 접속 URL: ${targetUrl}`);
+        
+        console.log(`🔗 최종 접속 URL: ${targetUrl}`);
         
         await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(3000);
