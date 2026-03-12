@@ -480,7 +480,7 @@ const MonitoringPage = () => {
                 </button>
               </h3>
               <div className="space-y-2">
-                {results.slice(0, 5).map((r) => {
+                {results.slice(0, 10).map((r) => {
                   const tpl = templates.find((t) => t.id === r.templateId);
                   return (
                     <div
