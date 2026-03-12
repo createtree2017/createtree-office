@@ -24,6 +24,16 @@ const AppLayout = () => (
     </>
 );
 
+// 역할별 기본 페이지 분기
+const RoleBasedHome = () => {
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    if (user && ['ADMIN', 'MANAGER'].includes(user.role)) {
+        return <Dashboard />;
+    }
+    return <Navigate to="/monitoring" replace />;
+};
+
 function App() {
     return (
         <>
@@ -35,7 +45,7 @@ function App() {
                 {/* Protected Routes - NavBar 포함 레이아웃 */}
                 <Route element={<ProtectedRoute />}>
                     <Route element={<AppLayout />}>
-                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/" element={<RoleBasedHome />} />
                         <Route path="/manuals" element={<ManualsPage />} />
                         <Route path="/manuals/:id" element={<ManualsPage />} />
                         <Route path="/tasks" element={<TasksPage />} />
