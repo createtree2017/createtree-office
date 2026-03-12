@@ -140,8 +140,61 @@ class TelegramService {
                 }
             }
 
-            // /stop 명령 → 연동 해제
-            if (text === "/stop") {
+            // /연동 {병원명} 명령 → 그룹 채팅방에 거래처 연동
+            if (text.startsWith("/연동")) {
+                const clientName = text.replace(/^\/연동\s*/, "").trim();
+
+                if (!clientName) {
+                    await this.sendMessage(chatId, [
+                        `⚠️ 사용법: /연동 {병원명}`,
+                        ``,
+                        `예시: /연동 그레이스병원`,
+                    ].join("\n"));
+                    return;
+                }
+
+                // DB에서 정확한 이름 매칭으로 거래처 찾기
+                const allClients = await db.select().from(clients);
+                const matchedClient = allClients.find(c => c.name === clientName);
+
+                if (matchedClient) {
+                    await db.update(clients)
+                        .set({
+                            telegramChatId: chatId,
+                            telegramConnectedAt: new Date(),
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(clients.id, matchedClient.id));
+
+                    await this.sendMessage(chatId, [
+                        `✅ *연동 완료!*`,
+                        ``,
+                        `🏥 *${this.escapeMarkdown(matchedClient.name)}*`,
+                        ``,
+                        `이 채팅방으로 모니터링 보고서가 자동 전송됩니다.`,
+                        `연동을 해제하려면 /해제 를 입력하세요.`,
+                    ].join("\n"));
+
+                    console.log(`✅ Telegram 그룹 연동 완료: ${matchedClient.name} → chatId=${chatId}`);
+                } else {
+                    // 유사한 이름 제안
+                    const suggestions = allClients
+                        .filter(c => c.name.includes(clientName) || clientName.includes(c.name))
+                        .map(c => c.name);
+
+                    const suggestionText = suggestions.length > 0
+                        ? `\n\n비슷한 거래처:\n${suggestions.map(s => `• ${s}`).join("\n")}`
+                        : "";
+
+                    await this.sendMessage(chatId,
+                        `⚠️ "${clientName}" 거래처를 찾을 수 없습니다.${suggestionText}\n\n정확한 거래처명을 입력해주세요.`,
+                        "Markdown"
+                    );
+                }
+            }
+
+            // /해제 명령 → 연동 해제 (그룹/1:1 모두 지원)
+            if (text === "/stop" || text === "/해제") {
                 const [client] = await db.select()
                     .from(clients)
                     .where(eq(clients.telegramChatId, chatId));
@@ -155,8 +208,10 @@ class TelegramService {
                         })
                         .where(eq(clients.id, client.id));
 
-                    await this.sendMessage(chatId, "🔕 알림이 해제되었습니다. 다시 연동하려면 관리자에게 문의하세요.");
+                    await this.sendMessage(chatId, `🔕 *${this.escapeMarkdown(client.name)}* 알림 연동이 해제되었습니다.`);
                     console.log(`🔕 Telegram 연동 해제: ${client.name}`);
+                } else {
+                    await this.sendMessage(chatId, "⚠️ 이 채팅방에 연동된 거래처가 없습니다.");
                 }
             }
         } catch (error: any) {

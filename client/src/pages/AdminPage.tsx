@@ -489,50 +489,16 @@ const AdminPage = () => {
                                                                 해제
                                                             </button>
                                                         </div>
-                                                        {client.telegramInviteCode && (
-                                                            <button
-                                                                onClick={() => {
-                                                                    navigator.clipboard.writeText(`https://t.me/createtree_bot?start=${client.telegramInviteCode}`);
-                                                                    toast.success('초대 링크가 복사되었습니다!');
-                                                                }}
-                                                                className="mt-2 w-full text-left px-2 py-1.5 text-[10px] font-mono text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer truncate"
-                                                                title="클릭하여 복사"
-                                                            >
-                                                                📋 t.me/createtree_bot?start={client.telegramInviteCode}
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                ) : client.telegramInviteCode ? (
-                                                    <>
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
-                                                                <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-                                                                대기중
-                                                            </span>
-                                                            <button
-                                                                onClick={() => handleTelegramInvite(client.id)}
-                                                                className="text-[10px] text-blue-500 hover:text-blue-700 font-bold transition-colors"
-                                                            >
-                                                                링크 재생성
-                                                            </button>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => {
-                                                                navigator.clipboard.writeText(`https://t.me/createtree_bot?start=${client.telegramInviteCode}`);
-                                                                toast.success('초대 링크가 복사되었습니다!');
-                                                            }}
-                                                            className="mt-2 w-full text-left px-2 py-1.5 text-[10px] font-mono text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer truncate"
-                                                            title="클릭하여 복사"
-                                                        >
-                                                            📋 t.me/createtree_bot?start={client.telegramInviteCode}
-                                                        </button>
                                                     </>
                                                 ) : (
                                                     <button
-                                                        onClick={() => handleTelegramInvite(client.id)}
-                                                        className="w-full py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(`/연동 ${client.name}`);
+                                                            toast.success('연동 명령어가 복사되었습니다! 텔레그램 그룹에 붙여넣기 하세요.');
+                                                        }}
+                                                        className="w-full py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors flex items-center justify-center gap-2"
                                                     >
-                                                        🔗 초대 링크 생성
+                                                        <span>📋</span> 연동 명령어 복사
                                                     </button>
                                                 )}
                                             </div>
