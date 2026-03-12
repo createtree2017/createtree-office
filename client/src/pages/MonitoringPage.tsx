@@ -29,7 +29,7 @@ const getAuthOnly = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
-interface Template {
+export interface MonitoringTemplate {
   id: number;
   name: string;
   templateType?: string;
@@ -49,7 +49,7 @@ interface Template {
   targetPlaces?: Array<{ platform: string; url: string; name?: string; sortOrder?: string }>;
   targetCafes?: Array<{ url: string; name?: string }>;
 }
-interface Result {
+export interface MonitoringResult {
   id: number;
   templateId: number;
   clientId: number;
@@ -61,10 +61,15 @@ interface Result {
   posts: any[] | null;
   statistics: any | null;
 }
-interface Client {
+export interface MonitoringClient {
   id: number;
   name: string;
 }
+
+// 내부 사용 alias
+type Template = MonitoringTemplate;
+type Result = MonitoringResult;
+type Client = MonitoringClient;
 
 const MonitoringPage = () => {
   const [tab, setTab] = useState<"dashboard" | "templates" | "results">(
@@ -120,7 +125,7 @@ const MonitoringPage = () => {
         const res = await fetch(`${API}/results`, { headers: getHeaders() });
         const data = await res.json();
         if (data.success) setResults(data.data);
-      } catch {}
+      } catch { }
     }, 5000);
     return () => clearInterval(interval);
   }, [results]);
@@ -354,12 +359,7 @@ const MonitoringPage = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm font-semibold transition-colors shadow-md"
-          >
-            <Plus size={16} /> 새 템플릿
-          </button>
+
         </div>
 
         {/* 탭 */}
@@ -393,7 +393,7 @@ const MonitoringPage = () => {
                     latestResult?.statistics?.overall_sentiment === "positive"
                       ? "긍정적 😊"
                       : latestResult?.statistics?.overall_sentiment ===
-                          "negative"
+                        "negative"
                         ? "부정적 😟"
                         : "중립 😐",
                 },
@@ -535,12 +535,9 @@ const MonitoringPage = () => {
                 <p className="text-[hsl(var(--muted-foreground))]">
                   모니터링 템플릿이 없습니다.
                 </p>
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="mt-3 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold"
-                >
-                  새 템플릿 만들기
-                </button>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
+                  관리자에게 템플릿 생성을 요청하세요. (템플릿 관리 메뉴)
+                </p>
               </div>
             )}
             {templates.map((t) => (
@@ -634,20 +631,7 @@ const MonitoringPage = () => {
                       {executing.has(t.id) ? "실행중..." : "실행"}
                     </button>
                   )}
-                  <button
-                    onClick={() => setEditingTemplate(t)}
-                    className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                    title="수정"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    onClick={() => deleteTemplate(t.id)}
-                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title="삭제"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+
                 </div>
               </div>
             ))}
@@ -707,7 +691,7 @@ const MonitoringPage = () => {
                       type="checkbox"
                       checked={selectedResultIds.has(r.id)}
                       onClick={(e) => toggleResultSelect(r.id, e)}
-                      onChange={() => {}}
+                      onChange={() => { }}
                       className="w-4 h-4 rounded accent-violet-600 shrink-0"
                     />
                     {getSentimentIcon(r.statistics?.overall_sentiment)}
@@ -968,38 +952,13 @@ const MonitoringPage = () => {
         </div>
       )}
 
-      {/* ========== 템플릿 생성 모달 ========== */}
-      {showCreate && (
-        <TemplateFormModal
-          mode="create"
-          clients={clients}
-          onClose={() => setShowCreate(false)}
-          onSaved={() => {
-            setShowCreate(false);
-            fetchData();
-          }}
-        />
-      )}
 
-      {/* ========== 템플릿 수정 모달 ========== */}
-      {editingTemplate && (
-        <TemplateFormModal
-          mode="edit"
-          template={editingTemplate}
-          clients={clients}
-          onClose={() => setEditingTemplate(null)}
-          onSaved={() => {
-            setEditingTemplate(null);
-            fetchData();
-          }}
-        />
-      )}
     </div>
   );
 };
 
 // ===== 통합 템플릿 폼 모달 (생성/수정 겸용) =====
-const TemplateFormModal = ({
+export const TemplateFormModal = ({
   mode,
   template,
   clients,

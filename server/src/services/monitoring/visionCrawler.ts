@@ -170,10 +170,37 @@ export class VisionCrawler {
             }
         }
 
-        // 리뷰 영역까지 스크롤 (리뷰가 viewport 안에 들어오도록)
+        // 리뷰 영역까지 스크롤 — 첫 번째 리뷰가 잘리지 않도록 여유를 두고 스크롤
+        // 전략: 첫 번째 리뷰 아이템을 찾아서 그 위치에서 위쪽으로 PADDING만큼 offset
         await page.evaluate(() => {
+            // 1순위: 개별 리뷰 아이템 (첫 번째 리뷰의 정확한 시작점)
+            const firstReview = document.querySelector(
+                '.list_review > li, .list_evaluation > li, .cont_review .item_review, .review_list .review_item'
+            );
+            if (firstReview) {
+                const rect = firstReview.getBoundingClientRect();
+                const PADDING_TOP = 80; // 첫 리뷰 위에 80px 여유
+                window.scrollTo({
+                    top: window.scrollY + rect.top - PADDING_TOP,
+                    behavior: 'instant',
+                });
+                return;
+            }
+            // 2순위: 정렬 버튼 영역 (이 바로 아래가 첫 리뷰)
+            const sortArea = document.querySelector('.sort_grade, .btn_sort, .filter_sort');
+            if (sortArea) {
+                const rect = sortArea.getBoundingClientRect();
+                window.scrollTo({
+                    top: window.scrollY + rect.top - 30,
+                    behavior: 'instant',
+                });
+                return;
+            }
+            // 3순위 (폴백): 리뷰 컨테이너 전체
             const reviewSection = document.querySelector('.cont_review, .list_review, #mArticle');
-            if (reviewSection) reviewSection.scrollIntoView({ behavior: 'instant' });
+            if (reviewSection) {
+                reviewSection.scrollIntoView({ behavior: 'instant', block: 'start' });
+            }
         });
         await page.waitForTimeout(1000);
 
