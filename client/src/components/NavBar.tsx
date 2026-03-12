@@ -53,10 +53,13 @@ const NavBar = () => {
     };
 
     const navItems = [
-        { path: '/', label: '홈', icon: Home },
-        { path: '/manuals', label: '매뉴얼', icon: Book },
-        { path: '/tasks', label: '업무', icon: CheckSquare },
-        { path: '/drive', label: '자료실', icon: FolderOpen },
+        // 홈/매뉴얼/업무/자료실 — ADMIN, MANAGER 전용
+        ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
+            { path: '/', label: '홈', icon: Home },
+            { path: '/manuals', label: '매뉴얼', icon: Book },
+            { path: '/tasks', label: '업무', icon: CheckSquare },
+            { path: '/drive', label: '자료실', icon: FolderOpen },
+        ] : []),
 
         ...(user && ['ADMIN', 'MANAGER', 'HOSPITAL_ADMIN'].includes(user.role) ? [
             { path: '/monitoring', label: '모니터링', icon: Activity },
