@@ -56,7 +56,7 @@ class TelegramService {
             ] : [];
 
             const message = [
-                `🏥 *${this.escapeMarkdown(client.name)}*`,
+                `🏥 *${this.escapeMarkdown(templateName)}*`,
                 `📊 수집 ${postsCount}건 | ${now}`,
                 ``,
                 ...sentimentLines,
