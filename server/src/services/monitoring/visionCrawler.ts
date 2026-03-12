@@ -96,7 +96,7 @@ export class VisionCrawler {
             if (platform === "kakaomap") {
                 return await this.captureKakaoMap(page, url, maxReviews, sortOrder);
             } else if (platform === "googleplace") {
-                return await this.captureGooglePlace(page, url, maxReviews);
+                return await this.captureGooglePlace(page, url, maxReviews, sortOrder);
             }
 
             return null;
@@ -214,35 +214,112 @@ export class VisionCrawler {
     }
 
     /**
-     * 구글 플레이스 리뷰 페이지 캡처
-     * URL: https://www.google.com/maps/place/...
+     * 구글 플레이스 리뷰 페이지 캡처 (고도화)
+     * - 사이드 패널(div[role="main"])만 정조준 캡처
+     * - 패널 내부 스크롤로 리뷰 추가 로드
+     * - 정렬 변경 (최신순) 지원
      */
-    private async captureGooglePlace(page: Page, url: string, maxReviews: number): Promise<Buffer | null> {
+    private async captureGooglePlace(page: Page, url: string, maxReviews: number, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         console.log("🌍 구글 플레이스 페이지 접속 중...");
 
-        await page.goto(url, { waitUntil: "networkidle", timeout: 20000 });
+        await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
         await page.waitForTimeout(3000);
-
-        // "리뷰" 탭 클릭 시도
-        try {
-            const reviewTab = page.locator('button[aria-label*="리뷰"], button:has-text("리뷰"), [data-tab-index="1"]').first();
-            if (await reviewTab.isVisible({ timeout: 3000 })) {
-                await reviewTab.click();
-                await page.waitForTimeout(3000);
-            }
-        } catch {
-            // 리뷰 탭이 없으면 무시
-        }
 
         // 쿠키 동의 팝업 닫기 (있으면)
         try {
-            const acceptBtn = page.locator('button:has-text("모두 수락"), button:has-text("Accept all")').first();
-            if (await acceptBtn.isVisible({ timeout: 1000 })) {
+            const acceptBtn = page.locator('button:has-text("모두 수락"), button:has-text("Accept all"), button:has-text("동의")').first();
+            if (await acceptBtn.isVisible({ timeout: 2000 })) {
                 await acceptBtn.click();
                 await page.waitForTimeout(1000);
             }
         } catch { /* 무시 */ }
 
+        // "리뷰" 탭 클릭 시도 (URL 파라미터로 이미 리뷰 탭일 수 있지만, 확실히 보장)
+        try {
+            const reviewTab = page.locator('button[role="tab"][aria-label*="리뷰"], button[role="tab"]:has-text("리뷰")').first();
+            if (await reviewTab.isVisible({ timeout: 3000 })) {
+                await reviewTab.click();
+                console.log("📑 리뷰 탭 클릭 완료");
+                await page.waitForTimeout(2000);
+            }
+        } catch {
+            console.log("⚠️ 리뷰 탭 클릭 실패 — URL 파라미터로 리뷰 표시 기대");
+        }
+
+        // 정렬 변경 (sortOrder === 'latest'이면 최신순으로)
+        if (sortOrder === 'latest') {
+            try {
+                const sortBtn = page.locator('button[aria-label="리뷰 정렬"], button[aria-label*="정렬"], button:has-text("정렬")').first();
+                if (await sortBtn.isVisible({ timeout: 3000 })) {
+                    await sortBtn.click();
+                    await page.waitForTimeout(1000);
+
+                    // 최신순 옵션 클릭 (메뉴의 두 번째 항목)
+                    const newestOption = page.locator('div[role="menuitemradio"]:nth-child(2), div[role="menuitemradio"]:has-text("최신순")').first();
+                    if (await newestOption.isVisible({ timeout: 2000 })) {
+                        await newestOption.click();
+                        console.log("📅 정렬: 최신순으로 변경");
+                        await page.waitForTimeout(2000);
+                    }
+                }
+            } catch {
+                console.log("⚠️ 정렬 변경 실패 — 기본 정렬로 진행");
+            }
+        }
+
+        // 사이드 패널 내부 스크롤로 리뷰 추가 로드
+        // 구글 맵은 패널 내부 스크롤로 리뷰를 무한 로드함
+        const scrollContainer = 'div.m6QErb.DxyBCb.kA9KIf.dS8AEf';
+        const scrollContainerFallback = 'div[role="main"] div[tabindex="-1"]';
+
+        if (maxReviews > 5) {
+            const scrollCount = Math.ceil(maxReviews / 5); // 한 번 스크롤에 약 3~5개 로드 추정
+            console.log(`📜 패널 내부 스크롤 ${scrollCount}회 시도...`);
+
+            for (let i = 0; i < scrollCount; i++) {
+                try {
+                    const scrolled = await page.evaluate((selectors) => {
+                        const { primary, fallback } = selectors;
+                        const container = document.querySelector(primary) || document.querySelector(fallback);
+                        if (container) {
+                            container.scrollTop += 1000;
+                            return true;
+                        }
+                        return false;
+                    }, { primary: scrollContainer, fallback: scrollContainerFallback });
+
+                    if (!scrolled) {
+                        console.log("⚠️ 스크롤 컨테이너를 찾지 못함 — 스크롤 중단");
+                        break;
+                    }
+                    await page.waitForTimeout(1500); // 새 리뷰 로딩 대기
+                } catch { break; }
+            }
+
+            // 캡처 전 스크롤을 맨 위로 복원 (전체 리뷰를 보여주기 위해)
+            try {
+                await page.evaluate((selectors) => {
+                    const { primary, fallback } = selectors;
+                    const container = document.querySelector(primary) || document.querySelector(fallback);
+                    if (container) container.scrollTop = 0;
+                }, { primary: scrollContainer, fallback: scrollContainerFallback });
+                await page.waitForTimeout(500);
+            } catch { /* 무시 */ }
+        }
+
+        // 사이드 패널 요소만 정조준 캡처 (지도 영역 제외)
+        try {
+            const panel = page.locator('div[role="main"]').first();
+            if (await panel.isVisible({ timeout: 3000 })) {
+                const screenshot = await panel.screenshot({ type: "png" });
+                console.log("📸 사이드 패널 정조준 캡처 완료");
+                return Buffer.from(screenshot);
+            }
+        } catch (err: any) {
+            console.warn(`⚠️ 패널 정조준 캡처 실패, 전체 페이지 캡처로 폴백: ${err.message}`);
+        }
+
+        // 폴백: 전체 페이지 스크린샷
         const screenshot = await page.screenshot({
             type: "png",
             fullPage: false,
