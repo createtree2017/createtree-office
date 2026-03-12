@@ -280,19 +280,24 @@ export class VisionCrawler {
     private async captureGooglePlace(page: Page, url: string, maxReviews: number, sortOrder: "latest" | "relevant" = "relevant"): Promise<Buffer | null> {
         console.log("🔍 구글 통합검색 리뷰 방식으로 접속...");
 
-        // 1. URL에서 장소명 추출
-        const placeName = this.extractPlaceNameFromUrl(url);
-        if (!placeName) {
-            console.error("❌ URL에서 장소명을 추출할 수 없습니다:", url);
-            return null;
+        // 1. URL 판별: 이미 구글 검색 URL이면 그대로 사용, 구글 맵 URL이면 검색 URL 생성
+        let targetUrl = url;
+        if (url.includes("google.com/search")) {
+            // 이미 구글 검색 URL → 그대로 사용
+            console.log("🔗 구글 검색 URL 직접 사용");
+        } else if (url.includes("google.com/maps")) {
+            // 구글 맵 URL → 장소명 추출 후 검색 URL 생성
+            const placeName = this.extractPlaceNameFromUrl(url);
+            if (!placeName) {
+                console.error("❌ URL에서 장소명을 추출할 수 없습니다:", url);
+                return null;
+            }
+            console.log(`🏥 장소명 추출: "${placeName}"`);
+            targetUrl = `https://www.google.com/search?q=${encodeURIComponent(placeName + " 리뷰")}&hl=ko`;
         }
-        console.log(`🏥 장소명 추출: "${placeName}"`);
-
-        // 2. 구글 통합검색으로 접속
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(placeName + " 리뷰")}&hl=ko`;
-        console.log(`🔗 검색 URL: ${searchUrl}`);
+        console.log(`🔗 접속 URL: ${targetUrl}`);
         
-        await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(3000);
 
         // 디버그: 페이지 정보
