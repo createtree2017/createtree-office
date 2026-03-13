@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Activity,
   Plus,
@@ -89,6 +89,7 @@ const MonitoringPage = () => {
   );
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -596,10 +597,7 @@ const MonitoringPage = () => {
                       </div>
                     )}
                   <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                    범위: {t.monitoringScope?.join(", ")} | 거래처:{" "}
-                    {clients.find((c) => c.id === t.clientId)?.name ||
-                      t.clientId}{" "}
-                    | 수집: {t.collectCount}건
+                    범위: {t.monitoringScope?.join(", ")} | 거래처: {(t as any).clientName ?? '알 수 없음'} | 수집: {t.collectCount}건
                     {t.scheduleEnabled &&
                       t.scheduleCron &&
                       ` | 자동: ${t.scheduleCron}`}
@@ -607,16 +605,23 @@ const MonitoringPage = () => {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   {t.scheduleEnabled ? (
-                    <button
-                      onClick={() => toggleSchedule(t)}
-                      className="flex items-center justify-center gap-1.5 min-w-[110px] px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors group"
-                      title="클릭하여 자동 실행 중단"
-                    >
-                      <RefreshCw size={14} className="animate-spin group-hover:hidden" />
-                      <Square size={14} className="hidden group-hover:block" />
-                      <span className="group-hover:hidden">자동 실행중</span>
-                      <span className="hidden group-hover:block">중단</span>
-                    </button>
+                    canDelete ? (
+                      <button
+                        onClick={() => toggleSchedule(t)}
+                        className="flex items-center justify-center gap-1.5 min-w-[110px] px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors group"
+                        title="클릭하여 자동 실행 중단"
+                      >
+                        <RefreshCw size={14} className="animate-spin group-hover:hidden" />
+                        <Square size={14} className="hidden group-hover:block" />
+                        <span className="group-hover:hidden">자동 실행중</span>
+                        <span className="hidden group-hover:block">중단</span>
+                      </button>
+                    ) : (
+                      <span className="flex items-center gap-1.5 min-w-[110px] px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold cursor-default">
+                        <RefreshCw size={14} className="animate-spin" />
+                        자동 실행중
+                      </span>
+                    )
                   ) : (
                     <button
                       onClick={() => executeMonitoring(t.id)}
@@ -641,7 +646,7 @@ const MonitoringPage = () => {
         {/* ========== 결과 목록 탭 ========== */}
         {tab === "results" && (
           <div className="space-y-3">
-            {results.length > 0 && (
+            {results.length > 0 && canDelete && (
               <div className="flex items-center justify-between bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] px-5 py-3">
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-[hsl(var(--muted-foreground))]">
                   <input
@@ -687,13 +692,15 @@ const MonitoringPage = () => {
                   className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === "COMPLETED" ? "cursor-pointer hover:border-violet-300 dark:hover:border-violet-700" : ""} ${selectedResultIds.has(r.id) ? "border-violet-400 bg-violet-50/50 dark:bg-violet-900/10" : ""} transition-colors`}
                 >
                   <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedResultIds.has(r.id)}
-                      onClick={(e) => toggleResultSelect(r.id, e)}
-                      onChange={() => { }}
-                      className="w-4 h-4 rounded accent-violet-600 shrink-0"
-                    />
+                    {canDelete && (
+                      <input
+                        type="checkbox"
+                        checked={selectedResultIds.has(r.id)}
+                        onClick={(e) => toggleResultSelect(r.id, e)}
+                        onChange={() => { }}
+                        className="w-4 h-4 rounded accent-violet-600 shrink-0"
+                      />
+                    )}
                     {getSentimentIcon(r.statistics?.overall_sentiment)}
                     <div>
                       <p className="font-semibold text-sm text-[hsl(var(--foreground))]">
