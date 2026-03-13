@@ -87,6 +87,7 @@ const MonitoringPage = () => {
   const [selectedResultIds, setSelectedResultIds] = useState<Set<number>>(
     new Set(),
   );
+  const [clientFilter, setClientFilter] = useState<number | null>(null);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -525,23 +526,59 @@ const MonitoringPage = () => {
         )}
 
         {/* ========== 템플릿 탭 ========== */}
-        {tab === "templates" && (
+        {tab === "templates" && (() => {
+          // 템플릿에서 고유 거래처 목록 추출
+          const uniqueClients = Array.from(
+            new Map(templates.map(t => [t.clientId, (t as any).clientName || clients.find(c => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
+          ).map(([id, name]) => ({ id, name }));
+          const filteredTemplates = clientFilter === null ? templates : templates.filter(t => t.clientId === clientFilter);
+
+          return (
           <div className="space-y-3">
-            {templates.length === 0 && (
+            {/* 거래처 필터 바 */}
+            {uniqueClients.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+                <button
+                  onClick={() => setClientFilter(null)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                    clientFilter === null
+                      ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                      : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
+                  }`}
+                >
+                  전체
+                </button>
+                {uniqueClients.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setClientFilter(c.id)}
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                      clientFilter === c.id
+                        ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                        : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {filteredTemplates.length === 0 && (
               <div className="text-center py-16 bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))]">
                 <Activity
                   size={40}
                   className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]"
                 />
                 <p className="text-[hsl(var(--muted-foreground))]">
-                  모니터링 템플릿이 없습니다.
+                  {clientFilter !== null ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
                 </p>
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
                   관리자에게 템플릿 생성을 요청하세요. (템플릿 관리 메뉴)
                 </p>
               </div>
             )}
-            {templates.map((t) => (
+            {filteredTemplates.map((t) => (
               <div
                 key={t.id}
                 className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-start justify-between"
@@ -641,7 +678,8 @@ const MonitoringPage = () => {
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {/* ========== 결과 목록 탭 ========== */}
         {tab === "results" && (
