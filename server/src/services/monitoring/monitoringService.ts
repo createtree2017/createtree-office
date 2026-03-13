@@ -37,10 +37,37 @@ export class MonitoringService {
     // ===== Template CRUD =====
 
     async getTemplates(clientId?: number | null) {
+        const query = db
+            .select({
+                id: monitoringTemplates.id,
+                name: monitoringTemplates.name,
+                templateType: monitoringTemplates.templateType,
+                clientId: monitoringTemplates.clientId,
+                clientName: clients.name,
+                keywords: monitoringTemplates.keywords,
+                monitoringScope: monitoringTemplates.monitoringScope,
+                isActive: monitoringTemplates.isActive,
+                collectCount: monitoringTemplates.collectCount,
+                searchType: monitoringTemplates.searchType,
+                dateRange: monitoringTemplates.dateRange,
+                crawlingMethod: monitoringTemplates.crawlingMethod,
+                analysisMode: monitoringTemplates.analysisMode,
+                scheduleEnabled: monitoringTemplates.scheduleEnabled,
+                scheduleCron: monitoringTemplates.scheduleCron,
+                scheduleLastRunAt: monitoringTemplates.scheduleLastRunAt,
+                targetPlaces: monitoringTemplates.targetPlaces,
+                targetCafes: monitoringTemplates.targetCafes,
+                createdAt: monitoringTemplates.createdAt,
+                updatedAt: monitoringTemplates.updatedAt,
+            })
+            .from(monitoringTemplates)
+            .leftJoin(clients, eq(monitoringTemplates.clientId, clients.id))
+            .orderBy(desc(monitoringTemplates.createdAt));
+
         if (clientId) {
-            return db.select().from(monitoringTemplates).where(eq(monitoringTemplates.clientId, clientId)).orderBy(desc(monitoringTemplates.createdAt));
+            return query.where(eq(monitoringTemplates.clientId, clientId));
         }
-        return db.select().from(monitoringTemplates).orderBy(desc(monitoringTemplates.createdAt));
+        return query;
     }
 
     async getTemplate(id: number) {
