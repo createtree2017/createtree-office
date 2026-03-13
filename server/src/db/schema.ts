@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, pgEnum, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, pgEnum, integer, jsonb, date } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "MANAGER", "HOSPITAL_ADMIN", "USER"]);
 export const taskStatusEnum = pgEnum("task_status", ["PENDING", "IN_PROGRESS", "ON_HOLD", "COMPLETED"]);
@@ -10,6 +10,11 @@ export const clients = pgTable("clients", {
     telegramChatId: text("telegram_chat_id"),
     telegramInviteCode: text("telegram_invite_code"),
     telegramConnectedAt: timestamp("telegram_connected_at"),
+    contractEndedAt: timestamp("contract_ended_at"),      // 계약종료 일시 (null = 활성)
+    contractStartDate: date("contract_start_date"),        // 계약시작일
+    contractEndDate: date("contract_end_date"),            // 계약만료일
+    contractFileDriveId: text("contract_file_drive_id"),  // 계약서 Drive 파일 ID
+    contractFileName: text("contract_file_name"),          // 계약서 원본 파일명
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -77,6 +82,15 @@ export const taskTemplates = pgTable("task_templates", {
     authorId: integer("author_id").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// 거래처-서비스 계약 (거래처 ↔ 업무템플릿 N:M)
+export const clientServiceContracts = pgTable("client_service_contracts", {
+    id: serial("id").primaryKey(),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
+    templateId: integer("template_id").references(() => taskTemplates.id, { onDelete: "cascade" }).notNull(),
+    driveFolderId: text("drive_folder_id"), // 생성된 드라이브 템플릿 폴더 ID
+    createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const taskResponses = pgTable("task_responses", {

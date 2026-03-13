@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { tasks, users, clients, taskTemplates } from "../db/schema.js";
-import { eq, or, desc } from "drizzle-orm";
+import { tasks, users, clients, taskTemplates, clientServiceContracts } from "../db/schema.js";
+import { eq, or, desc, and } from "drizzle-orm";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { google } from "googleapis";
 
@@ -90,16 +90,41 @@ router.post("/", authenticateToken, async (req: AuthRequest, res) => {
             return res.status(400).json({ success: false, message: "제목과 담당자를 지정해야 합니다." });
         }
 
-        // 템플릿 사용시 구글 드라이브 폴더 생성
+        // 드라이브 폴더 생성 로직:
+        // 거래처 + 템플릿 모두 있는 경우 → 계약 템플릿 폴더 하위에 업무폴더 생성
+        // 그 외의 경우 → 기존 fallback (거래처폴더 또는 루트폴더 하위)
         let driveFolderId = null;
         if (templateId) {
             let parentDriveFolderId = MASTER_ROOT_FOLDER_ID;
-            if (clientId) {
-                const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
-                if (client && client.driveFolderId) {
-                    parentDriveFolderId = client.driveFolderId;
+
+            if (clientId && templateId) {
+                // 1순위: 계약 테이블에서 템플릿 폴더 ID 조회
+                const [contract] = await db
+                    .select()
+                    .from(clientServiceContracts)
+                    .where(and(
+                        eq(clientServiceContracts.clientId, clientId),
+                        eq(clientServiceContracts.templateId, templateId)
+                    ));
+
+                if (contract?.driveFolderId) {
+                    // 계약 템플릿 폴더 하위에 업무 폴더 생성
+                    parentDriveFolderId = contract.driveFolderId;
+                    console.log(`📁 [Tasks] 업무 폴더 생성 위치: 템플릿폴더(${contract.driveFolderId}) 하위`);
+                } else {
+                    // 2순위: 계약은 있으나 드라이브폴더 없으면 거래처 폴더 하위
+                    const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+                    if (client?.driveFolderId) {
+                        parentDriveFolderId = client.driveFolderId;
+                        console.log(`📁 [Tasks] 거래처 폴더 하위에 업무 폴더 생성 (fallback)`);
+                    }
                 }
+            } else if (clientId) {
+                // 템플릿 없으면 거래처 폴더 하위
+                const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+                if (client?.driveFolderId) parentDriveFolderId = client.driveFolderId;
             }
+
             console.log(`Creating Drive folder: "${title}" inside parent: ${parentDriveFolderId}`);
             driveFolderId = await createDriveFolder(title, parentDriveFolderId);
         }
@@ -178,6 +203,29 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
             })
             .where(eq(tasks.id, parseInt(id)))
             .returning();
+
+        // 업무 제목이 변경되고 드라이브 폴더가 연결된 경우 → 드라이브 폴더명 동기화
+        if (title && title !== task.title && task.driveFolderId) {
+            try {
+                let authOptions: any = { scopes: ['https://www.googleapis.com/auth/drive'] };
+                if (process.env.GOOGLE_CREDENTIALS_JSON) {
+                    authOptions.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+                } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+                    authOptions.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+                }
+                const auth = new google.auth.GoogleAuth(authOptions);
+                const drive = google.drive({ version: 'v3', auth });
+                await drive.files.update({
+                    fileId: task.driveFolderId,
+                    requestBody: { name: title },
+                    supportsAllDrives: true,
+                });
+                console.log(`✏️ 드라이브 폴더명 동기화: "${task.title}" → "${title}" (${task.driveFolderId})`);
+            } catch (driveErr: any) {
+                // 드라이브 동기화 실패는 업무 수정 성공에 영향 주지 않음 (경고만 로깅)
+                console.warn(`⚠️ 드라이브 폴더명 동기화 실패 (업무 수정은 완료):`, driveErr.message);
+            }
+        }
 
         res.json({ success: true, data: updatedTask });
     } catch (error: any) {

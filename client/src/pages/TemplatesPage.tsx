@@ -4,7 +4,7 @@ import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Acti
 import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
 
 // ===== 업무 템플릿 타입 =====
-type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'file';
+type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'file' | 'date' | 'date_range';
 
 interface Option {
     id: string;
@@ -49,6 +49,15 @@ const TemplatesPage: React.FC = () => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [questions, setQuestions] = useState<Question[]>([]);
+
+    // ===== 템플릿 삭제 확인 모달 상태 =====
+    const [deleteConfirm, setDeleteConfirm] = useState<{
+        open: boolean;
+        templateId: number | null;
+        templateTitle: string;
+        linkedTasks: { id: number; title: string; status: string; dueDate?: string }[];
+        loading: boolean;
+    }>({ open: false, templateId: null, templateTitle: '', linkedTasks: [], loading: false });
 
     // ===== 모니터링 템플릿 상태 =====
     const [monTemplates, setMonTemplates] = useState<MonitoringTemplate[]>([]);
@@ -96,17 +105,42 @@ const TemplatesPage: React.FC = () => {
         setQuestions(template.formSchema);
     };
 
-    const handleDelete = async (id: number) => {
-        if (!window.confirm('정말 이 템플릿을 삭제하시겠습니까? (연결된 업무가 있으면 삭제할 수 없습니다.)')) return;
+    const handleDelete = async (id: number, templateTitle: string) => {
+        // 연결된 업무 목록 먼저 조회
+        setDeleteConfirm({ open: true, templateId: id, templateTitle, linkedTasks: [], loading: true });
         try {
-            await fetch(`/api/templates/${id}`, {
+            const res = await fetch(`/api/templates/${id}/linked-tasks`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            setDeleteConfirm(prev => ({ ...prev, linkedTasks: data.tasks || [], loading: false }));
+        } catch {
+            setDeleteConfirm(prev => ({ ...prev, loading: false }));
+        }
+    };
+
+    const confirmDelete = async () => {
+        const id = deleteConfirm.templateId;
+        if (!id) return;
+        setDeleteConfirm(prev => ({ ...prev, loading: true }));
+        try {
+            const res = await fetch(`/api/templates/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
-            toast.success('템플릿이 삭제되었습니다.');
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                toast.error(data.message || '삭제 실패');
+                return;
+            }
+            const data = await res.json();
+            toast.success(data.message || '템플릿이 삭제되었습니다.');
+            setDeleteConfirm({ open: false, templateId: null, templateTitle: '', linkedTasks: [], loading: false });
             fetchTemplates();
-        } catch (error) {
-            toast.error('템플릿 삭제 실패');
+        } catch {
+            toast.error('삭제 실패: 서버 통신 오류');
+        } finally {
+            setDeleteConfirm(prev => ({ ...prev, loading: false }));
         }
     };
 
@@ -119,7 +153,19 @@ const TemplatesPage: React.FC = () => {
     };
 
     const handleQuestionChange = (id: string, field: keyof Question, value: any) => {
-        setQuestions(questions.map(q => q.id === id ? { ...q, [field]: value } : q));
+        setQuestions(questions.map(q => {
+            if (q.id !== id) return q;
+            const updated = { ...q, [field]: value };
+            // 타입 변경 시 options 자동 초기화
+            if (field === 'type') {
+                if ((value === 'radio' || value === 'checkbox' || value === 'select') && !q.options?.length) {
+                    updated.options = [{ id: Date.now().toString() + '-opt', text: '옵션 1' }];
+                } else if (value === 'text' || value === 'textarea' || value === 'file' || value === 'date' || value === 'date_range') {
+                    updated.options = undefined;
+                }
+            }
+            return updated;
+        }));
     };
 
     const handleRemoveQuestion = (id: string) => {
@@ -139,10 +185,9 @@ const TemplatesPage: React.FC = () => {
 
     const handleAddOption = (questionId: string) => {
         setQuestions(questions.map(q => {
-            if (q.id === questionId && q.options) {
-                return { ...q, options: [...q.options, { id: Date.now().toString(), text: `옵션 ${q.options.length + 1}` }] };
-            }
-            return q;
+            if (q.id !== questionId) return q;
+            const currentOptions = q.options || [];
+            return { ...q, options: [...currentOptions, { id: Date.now().toString(), text: `옵션 ${currentOptions.length + 1}` }] };
         }));
     };
 
@@ -288,6 +333,8 @@ const TemplatesPage: React.FC = () => {
                                         <option value="checkbox">체크박스 (다중)</option>
                                         <option value="select">드롭다운</option>
                                         <option value="file">파일 업로드 (드라이브)</option>
+                                        <option value="date">📅 날짜 (단일)</option>
+                                        <option value="date_range">📅 날짜 (기간: 시작일~종료일)</option>
                                     </select>
                                 </div>
                                 {(q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') && (
@@ -321,8 +368,17 @@ const TemplatesPage: React.FC = () => {
                     <button onClick={() => handleAddQuestion('radio')} className="flex flex-col items-center p-2 hover:bg-[hsl(var(--accent))] rounded text-[hsl(var(--foreground))]" title="객관식 질문 추가">
                         <CheckSquare className="w-5 h-5 mb-1" /><span className="text-xs">객관식</span>
                     </button>
+                    <button onClick={() => handleAddQuestion('select')} className="flex flex-col items-center p-2 hover:bg-[hsl(var(--accent))] rounded text-[hsl(var(--foreground))]" title="드롭다운 추가">
+                        <Square className="w-5 h-5 mb-1" /><span className="text-xs">드롭다운</span>
+                    </button>
                     <button onClick={() => handleAddQuestion('file')} className="flex flex-col items-center p-2 hover:bg-[hsl(var(--accent))] rounded text-[hsl(var(--foreground))]" title="파일 업로드 추가">
                         <Plus className="w-5 h-5 mb-1" /><span className="text-xs">파일첨부</span>
+                    </button>
+                    <button onClick={() => handleAddQuestion('date')} className="flex flex-col items-center p-2 hover:bg-[hsl(var(--accent))] rounded text-[hsl(var(--foreground))]" title="날짜(단일) 추가">
+                        <span className="text-lg mb-0.5">📅</span><span className="text-xs">단일날짜</span>
+                    </button>
+                    <button onClick={() => handleAddQuestion('date_range')} className="flex flex-col items-center p-2 hover:bg-[hsl(var(--accent))] rounded text-[hsl(var(--foreground))]" title="날짜(기간) 추가">
+                        <span className="text-lg mb-0.5">🗓️</span><span className="text-xs">기간날짜</span>
                     </button>
                 </div>
             </div>
@@ -393,7 +449,7 @@ const TemplatesPage: React.FC = () => {
                                             <span>{tpl.formSchema?.length || 0}개의 문항</span>
                                             <div className="flex gap-2">
                                                 <button onClick={() => handleEdit(tpl)} className="p-1 hover:text-blue-600"><Edit className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDelete(tpl.id)} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDelete(tpl.id, tpl.title)} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -520,6 +576,83 @@ const TemplatesPage: React.FC = () => {
                         fetchMonitoringData();
                     }}
                 />
+            )}
+
+            {/* ========== 업무 템플릿 삭제 확인 모달 ========== */}
+            {deleteConfirm.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl w-full max-w-md mx-4">
+                        {/* 헤더 */}
+                        <div className="flex items-center gap-3 p-6 border-b border-[hsl(var(--border))]">
+                            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                                <Trash2 size={18} className="text-red-500" />
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-[hsl(var(--foreground))]">템플릿 삭제</h2>
+                                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5 truncate max-w-[280px]">
+                                    {deleteConfirm.templateTitle}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 본문 */}
+                        <div className="p-6">
+                            {deleteConfirm.loading ? (
+                                <div className="flex items-center justify-center py-8 text-[hsl(var(--muted-foreground))]">
+                                    <RefreshCw size={20} className="animate-spin mr-2" /> 연결된 업무 확인 중...
+                                </div>
+                            ) : deleteConfirm.linkedTasks.length === 0 ? (
+                                <p className="text-sm text-[hsl(var(--muted-foreground))] text-center py-4">
+                                    연결된 업무가 없습니다. 템플릿만 삭제됩니다.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="text-sm text-red-500 font-medium mb-3">
+                                        ⚠️ 아래 업무 {deleteConfirm.linkedTasks.length}건이 함께 삭제됩니다.
+                                    </p>
+                                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                        {deleteConfirm.linkedTasks.map((task) => (
+                                            <div
+                                                key={task.id}
+                                                className="flex items-center justify-between px-3 py-2 bg-[hsl(var(--accent))] rounded-lg text-sm"
+                                            >
+                                                <span className="text-[hsl(var(--foreground))] font-medium truncate flex-1 mr-2">
+                                                    {task.title || '제목 없음'}
+                                                </span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                                                    task.status === 'completed'
+                                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                        : task.status === 'in_progress'
+                                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                                        : 'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                    {task.status === 'completed' ? '완료' : task.status === 'in_progress' ? '진행중' : '대기'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* 버튼 */}
+                        <div className="flex gap-3 px-6 pb-6">
+                            <button
+                                onClick={() => setDeleteConfirm({ open: false, templateId: null, templateTitle: '', linkedTasks: [], loading: false })}
+                                className="flex-1 px-4 py-2.5 border border-[hsl(var(--border))] rounded-lg text-sm font-semibold hover:bg-[hsl(var(--accent))] transition-colors"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={deleteConfirm.loading}
+                                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                                {deleteConfirm.loading ? '삭제 중...' : '삭제 확인'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

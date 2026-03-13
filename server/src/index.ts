@@ -15,6 +15,7 @@ import templatesRouter from "./routes/templates.js";
 import taskResponsesRouter from "./routes/taskResponses.js";
 import monitoringRouter from "./routes/monitoring.js";
 import notificationRouter from "./routes/notification.js";
+import clientContractsRouter from "./routes/clientContracts.js";
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use("/api/templates", templatesRouter);
 app.use("/api/task-responses", taskResponsesRouter);
 app.use("/api/monitoring", monitoringRouter);
 app.use("/api/notification", notificationRouter);
+app.use("/api/client-contracts", clientContractsRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });

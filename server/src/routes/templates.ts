@@ -1,7 +1,7 @@
 import express from "express";
 import { db } from "../db/index.js";
-import { taskTemplates, users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { taskTemplates, users, tasks, clientServiceContracts } from "../db/schema.js";
+import { eq, count, notInArray } from "drizzle-orm";
 import { authenticateToken } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -51,6 +51,27 @@ router.get("/:id", authenticateToken, async (req, res) => {
     }
 });
 
+// 템플릿에 연결된 업무 목록 조회 (삭제 전 확인용)
+router.get("/:id/linked-tasks", authenticateToken, async (req, res) => {
+    try {
+        const templateId = parseInt(req.params.id);
+        const linkedTasks = await db
+            .select({
+                id: tasks.id,
+                title: tasks.title,
+                status: tasks.status,
+                dueDate: tasks.dueDate,
+            })
+            .from(tasks)
+            .where(eq(tasks.templateId, templateId));
+
+        res.json({ tasks: linkedTasks, count: linkedTasks.length });
+    } catch (error) {
+        console.error("Error fetching linked tasks:", error);
+        res.status(500).json({ message: "서버 오류가 발생했습니다." });
+    }
+});
+
 // 템플릿 생성 (관리자 전용 고려 - authMiddleware의 req.user 확장 필요)
 router.post("/", authenticateToken, async (req: any, res) => {
     try {
@@ -95,17 +116,34 @@ router.put("/:id", authenticateToken, async (req, res) => {
     }
 });
 
-// 템플릿 삭제
+// 템플릿 삭제 (연결된 업무 함께 삭제)
 router.delete("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
+        const templateId = parseInt(id);
 
-        await db.delete(taskTemplates).where(eq(taskTemplates.id, parseInt(id)));
+        // 연결된 업무 수 확인 (응답에 포함해서 프론트에서 confirm 활용 가능)
+        const [{ linkedTaskCount }] = await db
+            .select({ linkedTaskCount: count() })
+            .from(tasks)
+            .where(eq(tasks.templateId, templateId));
 
-        res.json({ message: "템플릿이 삭제되었습니다." });
+        // 연결된 업무 먼저 삭제 (캐스케이드)
+        if (linkedTaskCount > 0) {
+            await db.delete(tasks).where(eq(tasks.templateId, templateId));
+        }
+
+        // 템플릿 삭제
+        await db.delete(taskTemplates).where(eq(taskTemplates.id, templateId));
+
+        res.json({
+            message: linkedTaskCount > 0
+                ? `템플릿과 연결된 업무 ${linkedTaskCount}건이 함께 삭제되었습니다.`
+                : "템플릿이 삭제되었습니다."
+        });
     } catch (error) {
         console.error("Error deleting template:", error);
-        res.status(500).json({ message: "서버 오류가 발생했습니다. (사용 중인 템플릿일 수 있습니다.)" });
+        res.status(500).json({ message: "서버 오류가 발생했습니다." });
     }
 });
 
