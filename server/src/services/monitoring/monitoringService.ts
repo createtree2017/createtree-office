@@ -139,13 +139,24 @@ export class MonitoringService {
                         for (const place of targetPlaces) {
                             let reviews: any[] = [];
 
-                            if (place.platform === 'kakaomap' || place.platform === 'googleplace') {
-                                // 비주얼 스크래핑 — URL로 직접 접속 (placeId 불필요)
+                            if (place.platform === 'googleplace') {
+                                // 구글 플레이스 — Outscraper API (안정적, 봇 감지 없음)
+                                const googleQuery = this.googlePlaceCollector.extractGoogleQuery(place.url);
+                                if (!googleQuery) {
+                                    console.warn(`⚠️ 구글 플레이스 URL 파싱 실패: ${place.url}`);
+                                    continue;
+                                }
+                                console.log(`🔍 구글 플레이스 수집 (Outscraper): ${googleQuery}`);
+                                reviews = await this.googlePlaceCollector.crawlGooglePlace(googleQuery, template.collectCount);
+
+                            } else if (place.platform === 'kakaomap') {
+                                // 카카오맵 — 비주얼 스크래핑 (Playwright + Gemini Vision)
                                 const sortOrder = (place.sortOrder === 'latest' ? 'latest' : 'relevant') as "latest" | "relevant";
-                                console.log(`📸 비주얼 스크래핑: ${place.url} (${place.platform}, 정렬: ${sortOrder})`);
+                                console.log(`📸 카카오맵 비주얼 스크래핑: ${place.url} (정렬: ${sortOrder})`);
                                 reviews = await this.visionCrawler.crawlByVision(
-                                    place.url, place.platform as "kakaomap" | "googleplace", template.collectCount, sortOrder
+                                    place.url, 'kakaomap', template.collectCount, sortOrder
                                 );
+
                             } else if (place.platform === 'naverplace') {
                                 const placeId = this.extractPlaceId(place.url, place.platform);
                                 console.log(`🔍 플레이스 ID 추출: ${place.url} → ${placeId} (${place.platform})`);

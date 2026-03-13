@@ -156,27 +156,23 @@ const TaskResponsePage: React.FC = () => {
     const handleSaveDraft = async () => {
         setIsSaving(true);
         try {
-            const payload = {
-                status: 'DRAFT',
-                responses: responses
-            };
-
-            const res = await fetch(`/api/tasks/${taskId}/response`, {
+            const res = await fetch(`/api/task-responses/${taskId}/draft`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ responseData: responses })
             });
 
-            if (res.ok) {
+            const data = await res.json();
+            if (res.ok && data.success) {
                 toast.success('임시저장되었습니다.');
             } else {
-                toast.error('임시저장 실패');
+                toast.error(data.message || '임시저장 실패');
             }
         } catch (error) {
-            toast.error('통신 오류');
+            toast.error('통신 오류가 발생했습니다.');
         } finally {
             setIsSaving(false);
         }
@@ -200,32 +196,28 @@ const TaskResponsePage: React.FC = () => {
 
         if (!window.confirm('제출 후에는 수정할 수 없습니다. 제출하시겠습니까?')) return;
 
-        setIsSaving(true);
+        setIsSubmitting(true);
         try {
-            const payload = {
-                status: 'SUBMITTED',
-                responses: responses
-            };
-
-            const res = await fetch(`/api/tasks/${taskId}/response`, {
-                method: 'PUT',
+            const res = await fetch(`/api/task-responses/${taskId}/submit`, {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ responseData: responses })
             });
 
-            if (res.ok) {
-                toast.success('최종 제출되었습니다.');
+            const data = await res.json();
+            if (res.ok && data.success) {
+                toast.success('최종 제출이 완료되었습니다.');
                 navigate('/tasks');
             } else {
-                toast.error('제출 실패');
+                toast.error(data.message || '제출 실패');
             }
         } catch (error) {
-            toast.error('통신 오류');
+            toast.error('통신 오류가 발생했습니다.');
         } finally {
-            setIsSaving(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -356,8 +348,45 @@ const TaskResponsePage: React.FC = () => {
                         </div>
                     </div>
                 );
+            case 'date':
+                return (
+                    <input
+                        type="date"
+                        value={val || ''}
+                        onChange={(e) => handleInputChange(q.id, e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors"
+                    />
+                );
+            case 'date_range': {
+                const rangeVal = typeof val === 'object' && val !== null ? val : { start: '', end: '' };
+                return (
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-widest">시작일</label>
+                            <input
+                                type="date"
+                                value={rangeVal.start || ''}
+                                onChange={(e) => handleInputChange(q.id, { ...rangeVal, start: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors"
+                            />
+                        </div>
+                        <span className="text-slate-400 font-bold text-lg pt-6">~</span>
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-widest">종료일</label>
+                            <input
+                                type="date"
+                                value={rangeVal.end || ''}
+                                onChange={(e) => handleInputChange(q.id, { ...rangeVal, end: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors"
+                            />
+                        </div>
+                    </div>
+                );
+            }
             default:
                 return <div className="p-4 bg-red-50 text-red-500 border border-red-200 rounded-lg">지원하지 않는 질문 타입입니다: {q.type}</div>;
+
+
         }
     };
 

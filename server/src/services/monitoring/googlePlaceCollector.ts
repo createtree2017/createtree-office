@@ -110,33 +110,54 @@ export class GooglePlaceCollector {
     }
 
     /**
-     * 구글 맵 URL에서 검색 쿼리 추출
-     * 다양한 URL 패턴 지원:
+     * 구글 맵 URL에서 Outscraper 검색 쿼리 추출
+     * 지원 패턴:
+     *   - place_id:ChIJ...  (직접 Place ID)
+     *   - ChIJ...           (Place ID만)
      *   - https://maps.google.com/maps/place/매장이름/...
      *   - https://www.google.com/maps/place/매장이름/@lat,lng,...
-     *   - https://maps.app.goo.gl/... (단축 URL → 매장명으로 대체 필요)
-     *   - place_id:ChIJ... (직접 Place ID)
+     *   - https://maps.app.goo.gl/... (단축 URL → URL 그대로 전달, Outscraper가 처리)
+     *   - 장소명+주소 직접 입력 (ex: "창조트리치과 서울")
      */
     extractGoogleQuery(url: string): string | null {
         try {
-            // Place ID 직접 입력
-            if (url.startsWith("place_id:") || url.startsWith("ChIJ")) {
-                return url.startsWith("place_id:") ? url : `place_id:${url}`;
-            }
+            // 1. Place ID 직접 입력
+            if (url.startsWith("place_id:")) return url;
+            if (/^ChIJ[a-zA-Z0-9_-]{10,}/.test(url)) return `place_id:${url}`;
 
-            // Google Maps URL에서 장소명 추출
-            // 패턴: /maps/place/장소이름/... or /maps/place/장소이름?...
-            const placeMatch = url.match(/\/maps\/place\/([^/@?]+)/);
-            if (placeMatch) {
-                return decodeURIComponent(placeMatch[1].replace(/\+/g, " "));
-            }
-
-            // 단축 URL이나 기타 → URL 자체를 쿼리로 사용 (Outscraper가 처리)
-            if (url.includes("google.com/maps") || url.includes("maps.app.goo.gl")) {
+            // 2. 단축 URL (maps.app.goo.gl) — Outscraper가 리디렉션 처리 가능
+            if (url.includes("maps.app.goo.gl") || url.includes("goo.gl/maps")) {
+                console.log(`🔗 단축 URL 감지: Outscraper에 직접 전달`);
                 return url;
             }
 
-            // 그 외 — 매장명이나 주소를 직접 입력한 경우
+            // 3. Google Maps URL — /maps/place/{장소명}/...
+            const placeMatch = url.match(/\/maps\/place\/([^/@?&#]+)/);
+            if (placeMatch) {
+                const placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, " ")).trim();
+                if (placeName) {
+                    console.log(`🔗 구글맵 URL에서 장소명 추출: "${placeName}"`);
+                    return placeName;
+                }
+            }
+
+            // 4. 검색 URL — ?q= 파라미터
+            const qMatch = url.match(/[?&]q=([^&]+)/);
+            if (qMatch) {
+                const query = decodeURIComponent(qMatch[1].replace(/\+/g, " ")).trim();
+                if (query) {
+                    console.log(`🔗 검색 URL에서 쿼리 추출: "${query}"`);
+                    return query;
+                }
+            }
+
+            // 5. URL이 아닌 장소명/주소 직접 입력
+            if (!url.startsWith("http")) {
+                return url.trim();
+            }
+
+            // 6. 파싱 실패 시 URL 그대로 전달 (Outscraper에서 처리 시도)
+            console.warn(`⚠️ 구글 URL 파싱 불확실 — URL 그대로 전달: ${url}`);
             return url;
         } catch {
             return url;

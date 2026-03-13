@@ -19,23 +19,62 @@ interface Client {
     telegramChatId?: string | null;
     telegramInviteCode?: string | null;
     telegramConnectedAt?: string | null;
+    contractEndedAt?: string | null;
+    contractStartDate?: string | null;
+    contractEndDate?: string | null;
+    contractFileDriveId?: string | null;
+    contractFileName?: string | null;
+}
+
+interface ServiceContract {
+    id: number;
+    clientId: number;
+    templateId: number;
+    driveFolderId?: string | null;
+    templateTitle?: string;
+    templateDescription?: string | null;
+    createdAt: string;
+}
+
+interface Template {
+    id: number;
+    title: string;
+    description?: string | null;
 }
 
 const AdminPage = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
+    const [terminatedClients, setTerminatedClients] = useState<Client[]>([]); // 계약종료 거래처
     const [loading, setLoading] = useState(true);
     const [newClientName, setNewClientName] = useState('');
+    const [newContractStartDate, setNewContractStartDate] = useState('');
+    const [newContractEndDate, setNewContractEndDate] = useState('');
+    const [contractFile, setContractFile] = useState<File | null>(null);
     const [creatingClient, setCreatingClient] = useState(false);
     const [syncingClients, setSyncingClients] = useState(false);
 
     // 탭 관리 및 병원 수정 상태
-    const [activeTab, setActiveTab] = useState<'users' | 'clients'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'terminated'>('users');
+    const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [editingClientId, setEditingClientId] = useState<number | null>(null);
     const [editingClientName, setEditingClientName] = useState('');
+    const [editingContractClientId, setEditingContractClientId] = useState<number | null>(null);
+    const [editContractStart, setEditContractStart] = useState('');
+    const [editContractEnd, setEditContractEnd] = useState('');
+    const [editContractFile, setEditContractFile] = useState<File | null>(null);
+
+
 
     // 회원 리스트 정렬 상태
     const [userSortBy, setUserSortBy] = useState<'createdAtDesc' | 'createdAtAsc' | 'nameAsc' | 'role' | 'status'>('createdAtDesc');
+
+    // ===== 계약 서비스 상태 =====
+    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
+    const [contractsMap, setContractsMap] = useState<Record<number, ServiceContract[]>>({});
+    const [addingContractFor, setAddingContractFor] = useState<number | null>(null); // clientId
+    const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]); // 다중 선택
+    const [isAddingContract, setIsAddingContract] = useState(false); // 중복 클릭 방지
 
     const fetchUsers = async () => {
         try {
@@ -63,9 +102,101 @@ const AdminPage = () => {
             const result = await response.json();
             if (result.success) {
                 setClients(result.data);
+                result.data.forEach((c: Client) => fetchContracts(c.id));
             }
         } catch (err) {
             console.error('거래처 목록 불러오기 실패:', err);
+        }
+    };
+
+    const fetchTerminatedClients = async () => {
+        try {
+            const response = await fetch('/api/clients?terminated=true', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const result = await response.json();
+            if (result.success) setTerminatedClients(result.data);
+        } catch { /* ignore */ }
+    };
+
+    const fetchTemplates = async () => {
+        try {
+            const res = await fetch('/api/templates', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            setAllTemplates(Array.isArray(data) ? data : []);
+        } catch { /* ignore */ }
+    };
+
+    const fetchContracts = async (clientId: number) => {
+        try {
+            const res = await fetch(`/api/client-contracts/${clientId}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setContractsMap(prev => ({ ...prev, [clientId]: data.data }));
+            }
+        } catch { /* ignore */ }
+    };
+
+    const handleAddContract = async (clientId: number) => {
+        if (selectedTemplateIds.length === 0 || isAddingContract) return;
+        setIsAddingContract(true);
+        let successCount = 0;
+        let failMessages: string[] = [];
+        try {
+            // 선택한 템플릿을 순차적으로 등록
+            for (const templateId of selectedTemplateIds) {
+                const res = await fetch('/api/client-contracts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ clientId, templateId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failMessages.push(data.message || '등록 실패');
+                }
+            }
+
+            if (successCount > 0) {
+                toast.success(`섛비스 ${successCount}건이 계약 등록되었습니다.`);
+            }
+            if (failMessages.length > 0) {
+                toast.error(failMessages.join('\n'));
+            }
+            setAddingContractFor(null);
+            setSelectedTemplateIds([]);
+            fetchContracts(clientId);
+        } catch {
+            toast.error('계약 추가 중 오류가 발생했습니다.');
+        } finally {
+            setIsAddingContract(false);
+        }
+    };
+
+    const handleRemoveContract = async (contractId: number, clientId: number) => {
+        if (!window.confirm('이 서비스 계약을 해제하시겠습니까? (드라이브 폴더는 유지됩니다)')) return;
+        try {
+            const res = await fetch(`/api/client-contracts/${contractId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchContracts(clientId);
+            } else {
+                toast.error(data.message || '계약 해제 실패');
+            }
+        } catch {
+            toast.error('계약 해제 중 오류가 발생했습니다.');
         }
     };
 
@@ -95,19 +226,28 @@ const AdminPage = () => {
         if (!newClientName.trim()) return;
         setCreatingClient(true);
         try {
+            const formData = new FormData();
+            formData.append('name', newClientName.trim());
+            if (newContractStartDate) formData.append('contractStartDate', newContractStartDate);
+            if (newContractEndDate) formData.append('contractEndDate', newContractEndDate);
+            if (contractFile) formData.append('contractFile', contractFile);
+
             const response = await fetch('/api/clients', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ name: newClientName }),
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: formData, // Content-Type: multipart/form-data 자동 설정
             });
             const result = await response.json();
             if (result.success) {
-                toast.success('새 거래처 및 드라이브 폴더가 정상 생성되었습니다.');
+                const hasFile = !!contractFile;
+                toast.success(`새 거래처 및 드라이브 폴더가 생성되었습니다.${hasFile ? ' 계약서 첨부 완료 📎' : ''}`);
                 setNewClientName('');
+                setNewContractStartDate('');
+                setNewContractEndDate('');
+                setContractFile(null);
+                setShowRegisterModal(false);
                 fetchClients();
+
             } else {
                 toast.error(result.message || '거래처 생성에 실패했습니다.');
             }
@@ -118,16 +258,16 @@ const AdminPage = () => {
         }
     };
 
+
     const handleUpdateClient = async (id: number) => {
         if (!editingClientName.trim()) return;
         try {
+            const formData = new FormData();
+            formData.append('name', editingClientName.trim());
             const response = await fetch(`/api/clients/${id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ name: editingClientName }),
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: formData,
             });
             const result = await response.json();
             if (result.success) {
@@ -142,6 +282,33 @@ const AdminPage = () => {
             toast.error('수정 중 네트워크 오류가 발생했습니다.');
         }
     };
+
+    const handleUpdateContractInfo = async (client: Client) => {
+        try {
+            const formData = new FormData();
+            if (editContractStart) formData.append('contractStartDate', editContractStart);
+            if (editContractEnd) formData.append('contractEndDate', editContractEnd);
+            if (editContractFile) formData.append('contractFile', editContractFile);
+            const response = await fetch(`/api/clients/${client.id}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: formData,
+            });
+            const result = await response.json();
+            if (result.success) {
+                toast.success('계약 정보가 업데이트되었습니다.' + (editContractFile ? ' 📎 계약서 첨부 완료' : ''));
+                setEditingContractClientId(null);
+                setEditContractFile(null);
+                fetchClients();
+            } else {
+                toast.error(result.message || '계약 정보 수정에 실패했습니다.');
+            }
+        } catch (err) {
+            toast.error('수정 중 네트워크 오류가 발생했습니다.');
+        }
+    };
+
+
 
     const handleTelegramInvite = async (clientId: number) => {
         try {
@@ -159,6 +326,45 @@ const AdminPage = () => {
             }
         } catch (err) {
             toast.error('초대 링크 생성 중 오류');
+        }
+    };
+
+    const handleTerminateClient = async (client: Client) => {
+        if (!window.confirm(`"​${client.name}"​ 거래처를 계약종료 처리하시걌습니까?\n\n• 활성 목록에서 숨겨집니다.\n• 구글 드라이브 폴더가 [계약종료] 폴더로 이동됩니다.`)) return;
+        try {
+            const res = await fetch(`/api/clients/${client.id}/terminate`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchClients();
+                fetchTerminatedClients();
+            } else {
+                toast.error(data.message || '계약종료 실패');
+            }
+        } catch {
+            toast.error('오류가 발생했습니다.');
+        }
+    };
+
+    const handleDeleteClient = async (client: Client) => {
+        if (!window.confirm(`⚠️ "${client.name}" 거래처를 완전히 삭제하시겠습니까?\n\n• 드라이브 폴더가 휴지통으로 이동됩니다.\n• 사이트에서 모든 자료가 삭제됩니다.\n\n이 작업은 되돌릴 수 없습니다.`)) return;
+        try {
+            const res = await fetch(`/api/clients/${client.id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchTerminatedClients();
+            } else {
+                toast.error(data.message || '삭제 실패');
+            }
+        } catch {
+            toast.error('오류가 발생했습니다.');
         }
     };
 
@@ -224,7 +430,9 @@ const AdminPage = () => {
     useEffect(() => {
         fetchUsers();
         fetchClients();
-    }, []);
+        fetchTerminatedClients();
+        fetchTemplates();
+    }, []);;
 
     // 회원 정렬 로직 적용
     const sortedUsers = [...users].sort((a, b) => {
@@ -274,7 +482,18 @@ const AdminPage = () => {
                         className={`pb-4 px-2 text-[15px] font-bold transition-all relative ${activeTab === 'clients' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
                     >
                         병원 관리
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-black">{clients.length}</span>
                         {activeTab === 'clients' && <div className="absolute bottom-0 left-0 w-full h-[3px] bg-blue-600 dark:bg-blue-400 rounded-t-full" />}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('terminated')}
+                        className={`pb-4 px-2 text-[15px] font-bold transition-all relative ${activeTab === 'terminated' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                    >
+                        계약종료
+                        {terminatedClients.length > 0 && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-black">{terminatedClients.length}</span>
+                        )}
+                        {activeTab === 'terminated' && <div className="absolute bottom-0 left-0 w-full h-[3px] bg-rose-600 dark:bg-rose-400 rounded-t-full" />}
                     </button>
                 </div>
 
@@ -376,37 +595,22 @@ const AdminPage = () => {
                             </table>
                         </div>
                     </div>
-                ) : (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300 pt-2">
-                        {/* 병원 관리 탭: 신규 병원 등록 폼 */}
-                        <form onSubmit={handleCreateClient} className="flex flex-col gap-3 p-6 bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-sm border border-slate-200 dark:border-[hsl(var(--border))] w-full xl:w-2/3">
-                            <label className="text-sm font-black text-blue-600 dark:text-blue-400 tracking-wide">🏥 병원(거래처) 신규 등록</label>
-                            <p className="text-xs text-slate-500 mb-2">등록 시 구글 드라이브 내에 <strong className="text-blue-500">전용 폴더가 동기화 자동 생성</strong>되고 즉시 권한을 배정할 수 있습니다.</p>
-                            <div className="flex gap-3">
-                                <input
-                                    type="text"
-                                    value={newClientName}
-                                    onChange={e => setNewClientName(e.target.value)}
-                                    placeholder="생성할 병원명 입력 (예: 구글치괴)"
-                                    className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-bold"
-                                />
-                                <button
-                                    disabled={creatingClient || !newClientName.trim()}
-                                    type="submit"
-                                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50 shrink-0"
-                                >
-                                    {creatingClient ? '폴더 연동 중...' : '등록 및 폴더 동기화'}
-                                </button>
-                            </div>
-                        </form>
+                ) : activeTab === 'clients' ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pt-2">
 
                         {/* 리스트 헤더 및 목록 새로고침 버튼 */}
-                        <div className="flex items-center justify-between mt-6 mb-2">
+                        <div className="flex items-center justify-between">
                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
                                 등록된 병원 목록
                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs px-2.5 py-0.5 rounded-full font-bold">{clients.length}</span>
                             </h3>
                             <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowRegisterModal(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all"
+                                >
+                                    🏥 병원 등록
+                                </button>
                                 <a
                                     href="https://t.me/createtree_bot"
                                     target="_blank"
@@ -425,6 +629,7 @@ const AdminPage = () => {
                                 </button>
                             </div>
                         </div>
+
 
                         {/* 병원 리스트 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -476,8 +681,150 @@ const AdminPage = () => {
                                                     </button>
                                                 </div>
                                                 <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">{client.name}</h3>
+                                                {/* 계약기간 */}
+                                                {(client.contractStartDate || client.contractEndDate) && (
+                                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                                        <span className="text-[10px] font-bold text-slate-400">📅</span>
+                                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                                            {client.contractStartDate || '?'} ~ {client.contractEndDate || '?'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {/* 계약서 첨부 여부 */}
+                                                <div className="flex items-center justify-between">
+                                                    {client.contractFileDriveId ? (
+                                                        <a
+                                                            href={`https://drive.google.com/file/d/${client.contractFileDriveId}/view`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 rounded-full text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors"
+                                                            title={client.contractFileName || '계약서'}
+                                                        >
+                                                            📎 계약서 첨부됨
+                                                        </a>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-300 dark:text-slate-600">⚠️ 계약서 없음</span>
+                                                    )}
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingContractClientId(editingContractClientId === client.id ? null : client.id);
+                                                            setEditContractStart(client.contractStartDate || '');
+                                                            setEditContractEnd(client.contractEndDate || '');
+                                                            setEditContractFile(null);
+                                                        }}
+                                                        className="text-[10px] font-bold text-slate-400 hover:text-blue-500 transition-colors"
+                                                    >
+                                                        {editingContractClientId === client.id ? '✕ 닫기' : '✏️ 수정'}
+                                                    </button>
+                                                </div>
+
+                                                {/* 계약정보 수정 패널 */}
+                                                {editingContractClientId === client.id && (
+                                                    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex flex-col gap-2 animate-in fade-in duration-200">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <input type="date" value={editContractStart} onChange={e => setEditContractStart(e.target.value)} className="flex-1 px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                                            <span className="text-slate-400 text-xs font-bold">~</span>
+                                                            <input type="date" value={editContractEnd} onChange={e => setEditContractEnd(e.target.value)} className="flex-1 px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                                        </div>
+                                                        <label className={`flex items-center gap-2 border border-dashed rounded-lg px-3 py-2 cursor-pointer transition-all ${editContractFile ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300'}`}>
+                                                            <span className="text-sm">{editContractFile ? '📎' : '📂'}</span>
+                                                            <span className="text-xs text-slate-500 truncate flex-1">{editContractFile ? editContractFile.name : '계약서 파일 첨부 (선택)'}</span>
+                                                            {editContractFile && <button type="button" onClick={e => { e.preventDefault(); setEditContractFile(null); }} className="text-xs text-slate-400 hover:text-rose-500">✕</button>}
+                                                            <input type="file" className="hidden" accept=".pdf,.doc,.docx,.hwp,.xlsx,.xls,.png,.jpg" onChange={e => setEditContractFile(e.target.files?.[0] || null)} />
+                                                        </label>
+                                                        <button
+                                                            onClick={() => handleUpdateContractInfo(client)}
+                                                            className="w-full py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                                        >
+                                                            저장
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+
+                                            {/* ===== 계약 서비스 섹션 ===== */}
+
+                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">계약 서비스</p>
+                                                    {addingContractFor !== client.id && (
+                                                        <button
+                                                            onClick={() => { setAddingContractFor(client.id); setSelectedTemplateIds([]); }}
+                                                            className="text-[10px] font-bold text-blue-500 hover:text-blue-700 transition-colors"
+                                                        >
+                                                            + 추가
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {addingContractFor === client.id && (() => {
+                                                    const available = allTemplates.filter(t =>
+                                                        !(contractsMap[client.id] || []).some((c: ServiceContract) => c.templateId === t.id)
+                                                    );
+                                                    return (
+                                                        <div className="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl animate-in fade-in slide-in-from-top-1 duration-150">
+                                                            {available.length === 0 ? (
+                                                                <p className="text-[10px] text-slate-400 text-center py-1">추가 가능한 서비스가 없습니다</p>
+                                                            ) : (
+                                                                <div className="space-y-1.5 mb-2.5">
+                                                                    {available.map(t => (
+                                                                        <label key={t.id} className="flex items-center gap-2 cursor-pointer group/item">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={selectedTemplateIds.includes(t.id)}
+                                                                                onChange={e => {
+                                                                                    setSelectedTemplateIds(prev =>
+                                                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                                                                                    );
+                                                                                }}
+                                                                                className="w-3.5 h-3.5 rounded text-blue-600 border-blue-300 focus:ring-blue-400 cursor-pointer"
+                                                                            />
+                                                                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors">{t.title}</span>
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            <div className="flex gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleAddContract(client.id)}
+                                                                    disabled={selectedTemplateIds.length === 0 || isAddingContract}
+                                                                    className="flex-1 py-1.5 text-[10px] font-bold bg-blue-600 text-white rounded-lg disabled:opacity-40 hover:bg-blue-700 transition-colors"
+                                                                >
+                                                                    {isAddingContract ? '등록 중...' : `등록하기 ${selectedTemplateIds.length > 0 ? `(${selectedTemplateIds.length}건)` : ''}`}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setAddingContractFor(null); setSelectedTemplateIds([]); }}
+                                                                    className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+                                                                >
+                                                                    취소
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                                <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                                                    {(contractsMap[client.id] || []).length === 0 ? (
+                                                        <span className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">계약된 서비스 없음</span>
+                                                    ) : (
+                                                        (contractsMap[client.id] || []).map((contract: ServiceContract) => (
+                                                            <span
+                                                                key={contract.id}
+                                                                className="group/tag inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700/50 text-indigo-700 dark:text-indigo-300 rounded-full text-[10px] font-bold"
+                                                            >
+                                                                {contract.driveFolderId ? '📁' : '⚠️'} {contract.templateTitle}
+                                                                <button
+                                                                    onClick={() => handleRemoveContract(contract.id, client.id)}
+                                                                    className="opacity-0 group-hover/tag:opacity-100 text-indigo-400 hover:text-red-500 transition-all ml-0.5"
+                                                                    title="계약 해제"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </span>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
                                                 <p className="text-[11px] text-slate-400 font-medium break-all flex flex-col gap-1">
                                                     <span className="uppercase tracking-widest text-[9px] font-bold text-slate-300 dark:text-slate-600">Drive Sync ID</span>
                                                     <span className="font-mono text-slate-500">{client.driveFolderId || '폴더 연동 없음'}</span>
@@ -514,12 +861,128 @@ const AdminPage = () => {
                                             </div>
                                         </>
                                     )}
+                                    {/* ===== 계약종료 버튼 ===== */}
+                                    <div className="mt-3 pt-3 border-t border-rose-100 dark:border-rose-900/30">
+                                        <button
+                                            onClick={() => handleTerminateClient(client)}
+                                            className="w-full py-2 text-[10px] font-bold text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg border border-rose-200 dark:border-rose-800/40 transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            🚫 계약 종료
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                )}
+                ) : activeTab === 'terminated' ? (
+                    <div className="animate-in fade-in duration-300">
+                        {terminatedClients.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-24 text-slate-400 dark:text-slate-600">
+                                <span className="text-5xl mb-4">✅</span>
+                                <p className="font-bold text-lg">계약종료된 거래처가 없습니다</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                                {terminatedClients.map(client => (
+                                    <div key={client.id} className="bento-card p-5 border border-rose-200 dark:border-rose-800/30 bg-rose-50/30 dark:bg-rose-900/10 opacity-80">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-lg">
+                                                🚫
+                                            </div>
+                                            <h3 className="text-base font-black text-slate-700 dark:text-slate-300 line-through">{client.name}</h3>
+                                        </div>
+                                        <div className="mb-4 px-3 py-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
+                                            <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-0.5">계약종료일</p>
+                                            <p className="text-sm font-black text-rose-600 dark:text-rose-400">
+                                                {client.contractEndedAt
+                                                    ? new Date(client.contractEndedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+                                                    : '-'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteClient(client)}
+                                            className="w-full py-2 text-[11px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800/40 transition-colors"
+                                        >
+                                            🗑️ 거래처 완전 삭제
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : null}
             </div>
+
+            {/* ===== 병원 등록 모달 ===== */}
+            {showRegisterModal && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                    onClick={e => { if (e.target === e.currentTarget) setShowRegisterModal(false); }}
+                >
+                    <div className="w-full max-w-md bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-slate-200 dark:border-[hsl(var(--border))] animate-in fade-in zoom-in-95 duration-200">
+                        {/* 모달 헤더 */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+                            <div>
+                                <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-0.5">신규 등록</p>
+                                <h2 className="text-lg font-black text-slate-900 dark:text-white">🏥 병원(거래처) 등록</h2>
+                            </div>
+                            <button onClick={() => setShowRegisterModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors font-bold text-lg">✕</button>
+                        </div>
+
+                        {/* 모달 본문 */}
+                        <form onSubmit={handleCreateClient} className="p-6 flex flex-col gap-4">
+                            <p className="text-xs text-slate-400 -mt-2">등록 시 구글 드라이브 내에 <strong className="text-blue-500">전용 폴더가 자동 생성</strong>되고 즉시 권한을 배정할 수 있습니다.</p>
+
+                            {/* 병원명 */}
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">병원명 *</span>
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={newClientName}
+                                    onChange={e => setNewClientName(e.target.value)}
+                                    placeholder="예: 포유문산부인과"
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-bold"
+                                />
+                            </div>
+
+                            {/* 계약기간 */}
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">계약기간</span>
+                                <div className="flex items-center gap-2">
+                                    <input type="date" value={newContractStartDate} onChange={e => setNewContractStartDate(e.target.value)} className="flex-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
+                                    <span className="text-slate-400 font-bold">~</span>
+                                    <input type="date" value={newContractEndDate} onChange={e => setNewContractEndDate(e.target.value)} className="flex-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
+                                </div>
+                            </div>
+
+                            {/* 계약서 파일 첨부 */}
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">계약서 첨부 (선택)</span>
+                                <label className={`flex items-center gap-3 border-2 border-dashed rounded-xl px-4 py-3 cursor-pointer transition-all ${contractFile ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300'}`}>
+                                    <span className="text-xl">{contractFile ? '📎' : '📂'}</span>
+                                    <div className="flex-1 min-w-0">
+                                        {contractFile
+                                            ? <span className="text-sm font-bold text-blue-600 dark:text-blue-400 truncate block">{contractFile.name}</span>
+                                            : <span className="text-sm text-slate-400">파일 클릭하여 업로드 (PDF, DOC, HWP 등)</span>
+                                        }
+                                    </div>
+                                    {contractFile && <button type="button" onClick={e => { e.preventDefault(); setContractFile(null); }} className="text-xs text-slate-400 hover:text-rose-500 font-bold shrink-0">✕</button>}
+                                    <input type="file" className="hidden" accept=".pdf,.doc,.docx,.hwp,.xlsx,.xls,.png,.jpg" onChange={e => setContractFile(e.target.files?.[0] || null)} />
+                                </label>
+                            </div>
+
+                            {/* 버튼 */}
+                            <div className="flex gap-3 pt-1">
+                                <button type="button" onClick={() => setShowRegisterModal(false)} className="flex-1 py-3 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 transition-all">취소</button>
+                                <button type="submit" disabled={creatingClient || !newClientName.trim()} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50">
+                                    {creatingClient ? '생성 중...' : '등록 및 폴더 동기화'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
