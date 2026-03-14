@@ -88,6 +88,7 @@ const MonitoringPage = () => {
     new Set(),
   );
   const [clientFilter, setClientFilter] = useState<number | null>(null);
+  const [resultClientFilter, setResultClientFilter] = useState<number | null>(null);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -490,13 +491,14 @@ const MonitoringPage = () => {
                       onClick={() =>
                         r.status === "COMPLETED" && setSelectedResult(r)
                       }
-                      className={`flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] ${r.status === "COMPLETED" ? "cursor-pointer hover:bg-[hsl(var(--accent))]" : ""} transition-colors`}
+                      className={`flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] ${r.status === "COMPLETED" ? "cursor-pointer hover:bg-[hsl(var(--accent))]" : ""} ${!r.templateId ? "opacity-60" : ""} transition-colors`}
                     >
                       <div className="flex items-center gap-3">
                         {getSentimentIcon(r.statistics?.overall_sentiment)}
                         <div>
                           <p className="text-sm font-medium text-[hsl(var(--foreground))]">
-                            {tpl?.name || `템플릿 #${r.templateId}`}
+                            {!r.templateId && <span className="text-[10px] text-red-400 mr-1">[삭제]</span>}
+                            {tpl?.name || (r as any).templateName || '삭제된 템플릿'}
                           </p>
                           <p className="text-xs text-[hsl(var(--muted-foreground))]">
                             {new Date(r.createdAt).toLocaleString("ko-KR")}
@@ -682,21 +684,65 @@ const MonitoringPage = () => {
         })()}
 
         {/* ========== 결과 목록 탭 ========== */}
-        {tab === "results" && (
+        {tab === "results" && (() => {
+          // 결과에서 고유 거래처 목록 추출
+          const resultClients = Array.from(
+            new Map(results.map(r => {
+              const cName = clients.find(c => c.id === r.clientId)?.name || `거래처 #${r.clientId}`;
+              return [r.clientId, cName];
+            })).entries()
+          ).map(([id, name]) => ({ id, name }));
+          const filteredResults = resultClientFilter === null ? results : results.filter(r => r.clientId === resultClientFilter);
+
+          return (
           <div className="space-y-3">
-            {results.length > 0 && canDelete && (
+            {/* 거래처 필터 바 */}
+            {resultClients.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+                <button
+                  onClick={() => setResultClientFilter(null)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                    resultClientFilter === null
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:border-violet-300"
+                  }`}
+                >
+                  전체
+                </button>
+                {resultClients.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setResultClientFilter(c.id)}
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                      resultClientFilter === c.id
+                        ? "bg-violet-600 text-white border-violet-600"
+                        : "bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:border-violet-300"
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {filteredResults.length > 0 && canDelete && (
               <div className="flex items-center justify-between bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] px-5 py-3">
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-[hsl(var(--muted-foreground))]">
                   <input
                     type="checkbox"
                     checked={
-                      selectedResultIds.size === results.length &&
-                      results.length > 0
+                      selectedResultIds.size === filteredResults.length &&
+                      filteredResults.length > 0
                     }
-                    onChange={toggleSelectAll}
+                    onChange={() => {
+                      if (selectedResultIds.size === filteredResults.length) {
+                        setSelectedResultIds(new Set());
+                      } else {
+                        setSelectedResultIds(new Set(filteredResults.map(r => r.id)));
+                      }
+                    }}
                     className="w-4 h-4 rounded accent-violet-600"
                   />
-                  전체 선택 ({selectedResultIds.size}/{results.length})
+                  전체 선택 ({selectedResultIds.size}/{filteredResults.length})
                 </label>
                 {selectedResultIds.size > 0 && (
                   <button
@@ -708,18 +754,18 @@ const MonitoringPage = () => {
                 )}
               </div>
             )}
-            {results.length === 0 && (
+            {filteredResults.length === 0 && (
               <div className="text-center py-16 bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))]">
                 <FileText
                   size={40}
                   className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]"
                 />
                 <p className="text-[hsl(var(--muted-foreground))]">
-                  모니터링 결과가 없습니다.
+                  {resultClientFilter !== null ? `선택한 거래처의 모니터링 결과가 없습니다.` : `모니터링 결과가 없습니다.`}
                 </p>
               </div>
             )}
-            {results.map((r) => {
+            {filteredResults.map((r) => {
               const tpl = templates.find((t) => t.id === r.templateId);
               return (
                 <div
@@ -727,7 +773,7 @@ const MonitoringPage = () => {
                   onClick={() =>
                     r.status === "COMPLETED" && setSelectedResult(r)
                   }
-                  className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === "COMPLETED" ? "cursor-pointer hover:border-violet-300 dark:hover:border-violet-700" : ""} ${selectedResultIds.has(r.id) ? "border-violet-400 bg-violet-50/50 dark:bg-violet-900/10" : ""} transition-colors`}
+                  className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === "COMPLETED" ? "cursor-pointer hover:border-violet-300 dark:hover:border-violet-700" : ""} ${selectedResultIds.has(r.id) ? "border-violet-400 bg-violet-50/50 dark:bg-violet-900/10" : ""} ${!r.templateId ? "opacity-60" : ""} transition-colors`}
                 >
                   <div className="flex items-center gap-3">
                     {canDelete && (
@@ -742,7 +788,8 @@ const MonitoringPage = () => {
                     {getSentimentIcon(r.statistics?.overall_sentiment)}
                     <div>
                       <p className="font-semibold text-sm text-[hsl(var(--foreground))]">
-                        {tpl?.name || `#${r.templateId}`}
+                        {!r.templateId && <span className="text-[10px] text-red-400 mr-1">[삭제]</span>}
+                        {tpl?.name || (r as any).templateName || '삭제된 템플릿'}
                       </p>
                       <p className="text-xs text-[hsl(var(--muted-foreground))]">
                         {new Date(r.createdAt).toLocaleString("ko-KR")}{" "}
@@ -797,7 +844,8 @@ const MonitoringPage = () => {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ========== 결과 상세 모달 ========== */}
