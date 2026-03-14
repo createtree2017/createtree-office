@@ -28,6 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
+# 한국 시간대 설정 (스케줄러가 KST 기준으로 동작)
+ENV TZ=Asia/Seoul
+
 WORKDIR /app
 
 # 루트 package.json 복사 및 설치

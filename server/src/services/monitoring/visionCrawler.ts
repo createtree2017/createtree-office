@@ -190,20 +190,26 @@ export class VisionCrawler {
         }
 
         // 정렬 변경 (sortOrder에 따라: 'latest' = 최신 순, 'relevant' = 유용한 순)
-        // 기본값은 '유용한 순'이므로, 'latest'일 때만 변경 필요
         if (sortOrder === 'latest') {
             try {
-                // 정렬 드롭다운 토글 버튼 (button.btn_sort)
                 const sortBtn = page.locator('button.btn_sort').first();
                 if (await sortBtn.isVisible({ timeout: 2000 })) {
-                    await sortBtn.click();
-                    await page.waitForTimeout(500);
-                    // '최신 순' 옵션 클릭 (카카오맵은 "최신 순" 띄어쓰기 있음)
-                    const newestOption = page.locator('a.link_sort:has-text("최신 순")').first();
-                    if (await newestOption.isVisible({ timeout: 2000 })) {
-                        await newestOption.click();
-                        console.log("📅 정렬: 최신 순으로 변경");
-                        await page.waitForTimeout(2000); // 리뷰 재로딩 대기
+                    const currentSortText = await sortBtn.innerText().catch(() => '');
+                    if (currentSortText.includes('최신')) {
+                        console.log("📅 정렬: 이미 최신 순 — 건너뜀");
+                    } else {
+                        await sortBtn.click();
+                        await page.waitForTimeout(500);
+                        const newestOption = page.locator('a.link_sort:has-text("최신 순")').first();
+                        if (await newestOption.isVisible({ timeout: 2000 })) {
+                            await newestOption.click();
+                            console.log("📅 정렬: 최신 순으로 변경");
+                        } else {
+                            // 옵션 못 찾으면 정렬 버튼 재클릭(토글 닫기)
+                            await sortBtn.click();
+                            console.log("⚠️ 최신 순 옵션 없음 — 드롭다운 토글 닫기");
+                        }
+                        await page.waitForTimeout(3000);
                     }
                 }
             } catch {
@@ -212,13 +218,12 @@ export class VisionCrawler {
         }
 
         // '더보기' 버튼 클릭 → 리뷰 추가 로드
-        // 첫 화면에 약 3~5개, 더보기 1회 클릭 시 약 5~10개 추가
         if (maxReviews > 5) {
-            const clickCount = Math.ceil((maxReviews - 5) / 10); // 10개씩 로드 추정
+            const clickCount = Math.ceil((maxReviews - 5) / 10);
             console.log(`📜 '더보기' 버튼 ${clickCount}회 클릭 시도...`);
             for (let i = 0; i < clickCount; i++) {
                 try {
-                    const moreBtn = page.locator('.btn_more, button:has-text("더보기"), a:has-text("더보기")').first();
+                    const moreBtn = page.locator('.btn_more, a.link_more, button:has-text("더보기"), a:has-text("더보기")').first();
                     if (await moreBtn.isVisible({ timeout: 2000 })) {
                         await moreBtn.click();
                         await page.waitForTimeout(1500);
@@ -227,46 +232,14 @@ export class VisionCrawler {
             }
         }
 
-        // 리뷰 영역까지 스크롤 — 첫 번째 리뷰가 잘리지 않도록 여유를 두고 스크롤
-        // 전략: 첫 번째 리뷰 아이템을 찾아서 그 위치에서 위쪽으로 PADDING만큼 offset
-        await page.evaluate(() => {
-            // 1순위: 개별 리뷰 아이템 (첫 번째 리뷰의 정확한 시작점)
-            const firstReview = document.querySelector(
-                '.list_review > li, .list_evaluation > li, .cont_review .item_review, .review_list .review_item'
-            );
-            if (firstReview) {
-                const rect = firstReview.getBoundingClientRect();
-                const PADDING_TOP = 80; // 첫 리뷰 위에 80px 여유
-                window.scrollTo({
-                    top: window.scrollY + rect.top - PADDING_TOP,
-                    behavior: 'instant',
-                });
-                return;
-            }
-            // 2순위: 정렬 버튼 영역 (이 바로 아래가 첫 리뷰)
-            const sortArea = document.querySelector('.sort_grade, .btn_sort, .filter_sort');
-            if (sortArea) {
-                const rect = sortArea.getBoundingClientRect();
-                window.scrollTo({
-                    top: window.scrollY + rect.top - 30,
-                    behavior: 'instant',
-                });
-                return;
-            }
-            // 3순위 (폴백): 리뷰 컨테이너 전체
-            const reviewSection = document.querySelector('.cont_review, .list_review, #mArticle');
-            if (reviewSection) {
-                reviewSection.scrollIntoView({ behavior: 'instant', block: 'start' });
-            }
-        });
-        await page.waitForTimeout(1000);
-
-        // viewport 크기만큼 스크린샷 (fullPage=false)
+        // ★ 카카오맵: fullPage screenshot 사용
+        // element screenshot은 고정 탭 헤더가 첫 번째 리뷰를 가리므로
+        // fullPage로 전체를 캡처하고 Gemini가 리뷰만 분석
+        console.log("📸 카카오맵 fullPage 캡처 (고정 헤더 가림 방지)");
         const screenshot = await page.screenshot({
             type: "png",
-            fullPage: false,
+            fullPage: true,
         });
-
         return Buffer.from(screenshot);
     }
 
@@ -484,7 +457,10 @@ export class VisionCrawler {
         const prompt = `당신은 온라인 리뷰 데이터 추출 전문가입니다.
 이 이미지는 ${platformName}의 매장 리뷰 화면 스크린샷입니다.
 
-이미지에 보이는 모든 리뷰를 아래 JSON 형식으로 정확히 추출하세요:
+중요: 이미지의 맨 위에 보이는 첫 번째 리뷰부터, 아래로 순서대로 모든 리뷰를 빠짐없이 추출하세요.
+정렬 버튼, 프로필 아이콘 영역은 리뷰가 아닙니다 — 그 아래에 별점(★)과 날짜, 본문이 함께 있는 것이 리뷰입니다.
+
+아래 JSON 형식으로 정확히 추출하세요:
 
 {
   "placeName": "매장 이름 (보이면)",
@@ -492,6 +468,7 @@ export class VisionCrawler {
   "averageRating": 4.5,
   "reviews": [
     {
+      "position": 1,
       "author": "작성자 닉네임",
       "rating": 5,
       "content": "리뷰 본문 전체 텍스트",
@@ -502,12 +479,13 @@ export class VisionCrawler {
 }
 
 반드시 지켜야 할 규칙:
-1. 이미지에 실제로 보이는 리뷰만 추출하세요 (절대 추측하거나 지어내지 마세요)
-2. 별점은 채워진 별(★)의 개수를 정확히 세세요
-3. 글씨가 잘리거나 안 보이면 "[판독불가]"로 표시
+1. 이미지에서 맨 위에 보이는 첫 번째 리뷰(position=1)를 절대 건너뛰지 마세요. 이것이 가장 중요합니다.
+2. 이미지에 실제로 보이는 리뷰만 추출하세요 (절대 추측하거나 지어내지 마세요)
+3. 별점은 채워진 별(★)의 개수를 정확히 세세요. 카카오맵은 별 1~5개로 표시됩니다.
 4. 리뷰가 전혀 없으면 reviews를 빈 배열로 반환
 5. 최대 ${maxReviews}개까지만 추출
-6. 날짜가 상대적(예: "2일 전", "1주 전")이면 그대로 기재`;
+6. 날짜가 상대적(예: "2일 전", "1주 전")이면 그대로 기재
+7. position은 이미지 위에서부터 순서대로 1, 2, 3... 으로 매기세요`;
 
         console.log("🤖 Gemini 2.5 Flash Vision 분석 중...");
 

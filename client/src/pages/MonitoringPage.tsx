@@ -913,7 +913,7 @@ const MonitoringPage = () => {
                   <h3 className="font-semibold mb-2 text-[hsl(var(--foreground))]">
                     📋 수집 게시글 ({selectedResult.posts.length}건)
                   </h3>
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                  <div className="space-y-2">
                     {selectedResult.posts
                       .slice(0, 30)
                       .map((p: any, i: number) => (

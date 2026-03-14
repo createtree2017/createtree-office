@@ -87,7 +87,7 @@ export class NaverCollector {
                 title: this.cleanHtml(item.title || ""),
                 content: this.cleanHtml(item.description || ""),
                 author: this.cleanHtml(item.bloggername || item.cafename || item.originallink || "익명"),
-                url: item.link || "",
+                url: searchType === "blog" ? this.toMobileBlogUrl(item.link || "") : (item.link || ""),
                 publishedAt: this.formatDate(item.postdate || item.pubDate || ""),
                 platform: "naver" as const,
                 source: sourceMap[searchType],
@@ -123,6 +123,21 @@ export class NaverCollector {
             return new Date(dateString).toISOString().split("T")[0];
         } catch {
             return new Date().toISOString().split("T")[0];
+        }
+    }
+
+    /** 네이버 블로그 데스크톱 URL → 모바일 URL 변환 (텔레그램 인앱 브라우저 호환) */
+    private toMobileBlogUrl(url: string): string {
+        try {
+            // 패턴: https://blog.naver.com/userId/logNo
+            const match = url.match(/blog\.naver\.com\/([^/?]+)\/(\d+)/);
+            if (match) {
+                return `https://m.blog.naver.com/PostView.naver?blogId=${match[1]}&logNo=${match[2]}`;
+            }
+            // 이미 모바일 URL이거나 매칭 안 되면 원본 반환
+            return url;
+        } catch {
+            return url;
         }
     }
 
