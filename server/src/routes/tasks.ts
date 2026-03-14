@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { tasks, users, clients, taskTemplates, clientServiceContracts } from "../db/schema.js";
+import { tasks, users, clients, taskTemplates, clientServiceContracts, taskResponses } from "../db/schema.js";
 import { eq, or, desc, and } from "drizzle-orm";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { google } from "googleapis";
@@ -249,10 +249,12 @@ router.delete("/:id", authenticateToken, async (req: AuthRequest, res) => {
             return res.status(403).json({ success: false, message: "삭제 권한이 없습니다. 작성자나 관리자만 삭제할 수 있습니다." });
         }
 
+        // taskResponses는 onDelete: cascade로 자동 삭제됨
         await db.delete(tasks).where(eq(tasks.id, parseInt(id)));
 
         res.json({ success: true, message: "업무가 성공적으로 삭제되었습니다." });
     } catch (error: any) {
+        console.error("업무 삭제 오류:", error);
         res.status(500).json({ success: false, message: "업무 삭제 중 오류가 발생했습니다." });
     }
 });

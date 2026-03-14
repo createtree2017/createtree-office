@@ -26,7 +26,7 @@ export const users = pgTable("users", {
     name: text("name").notNull(),
     thumbnail: text("thumbnail"), // 프로필 이미지 용도 (Base64)
     role: userRoleEnum("role").default("USER").notNull(),
-    clientId: integer("client_id").references(() => clients.id),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
     isApproved: boolean("is_approved").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -41,7 +41,7 @@ export const manuals = pgTable("manuals", {
     type: text("type").default("PAGE").notNull(), // PAGE | FOLDER
     icon: text("icon"),
     order: integer("order").default(0).notNull(),
-    authorId: integer("author_id").references(() => users.id),
+    authorId: integer("author_id").references(() => users.id, { onDelete: "set null" }),
     minRoleToEdit: userRoleEnum("min_role_to_edit").default("MANAGER").notNull(),
     googleFormId: text("google_form_id"),
     version: integer("version").default(1).notNull(),
@@ -55,10 +55,10 @@ export const tasks = pgTable("tasks", {
     description: text("description"),
     status: taskStatusEnum("status").default("PENDING").notNull(),
     dueDate: timestamp("due_date"),
-    assigneeId: integer("assignee_id").references(() => users.id),
-    authorId: integer("author_id").references(() => users.id),
-    templateId: integer("template_id").references(() => taskTemplates.id),
-    clientId: integer("client_id").references(() => clients.id),
+    assigneeId: integer("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    authorId: integer("author_id").references(() => users.id, { onDelete: "set null" }),
+    templateId: integer("template_id").references(() => taskTemplates.id, { onDelete: "set null" }),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
     driveFolderId: text("drive_folder_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -79,7 +79,7 @@ export const taskTemplates = pgTable("task_templates", {
     title: text("title").notNull(),
     description: text("description"),
     formSchema: jsonb("form_schema").notNull(), // 질문 항목 배열 (JSON)
-    authorId: integer("author_id").references(() => users.id),
+    authorId: integer("author_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -95,8 +95,8 @@ export const clientServiceContracts = pgTable("client_service_contracts", {
 
 export const taskResponses = pgTable("task_responses", {
     id: serial("id").primaryKey(),
-    taskId: integer("task_id").references(() => tasks.id).notNull(),
-    submitterId: integer("submitter_id").references(() => users.id),
+    taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }).notNull(),
+    submitterId: integer("submitter_id").references(() => users.id, { onDelete: "set null" }),
     responseData: jsonb("response_data").notNull(), // 임시저장 및 제출 데이터 (JSON)
     status: responseStatusEnum("status").default("DRAFT").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -111,7 +111,7 @@ export const monitoringTemplates = pgTable("monitoring_templates", {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     templateType: text("template_type").default("integrated").notNull(), // integrated | place
-    clientId: integer("client_id").references(() => clients.id).notNull(),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
     keywords: jsonb("keywords").$type<string[]>(), // nullable: 플레이스 템플릿은 키워드 불필요
     monitoringScope: jsonb("monitoring_scope").notNull().$type<string[]>(),
     searchType: text("search_type").default("latest").notNull(),
@@ -127,7 +127,7 @@ export const monitoringTemplates = pgTable("monitoring_templates", {
     analysisMode: text("analysis_mode").default("FULL").notNull(),
     notifyEnabled: boolean("notify_enabled").default(false).notNull(),
     notifyChannels: jsonb("notify_channels").$type<string[]>().default(["telegram"]),
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -136,7 +136,7 @@ export const monitoringResults = pgTable("monitoring_results", {
     id: serial("id").primaryKey(),
     templateId: integer("template_id").references(() => monitoringTemplates.id, { onDelete: "set null" }),
     templateName: text("template_name"), // 삭제된 템플릿 이름 보존용
-    clientId: integer("client_id").references(() => clients.id).notNull(),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
     status: monitoringStatusEnum("status").default("PENDING").notNull(),
     posts: jsonb("posts").$type<any[]>(),
     statistics: jsonb("statistics"),
@@ -145,7 +145,7 @@ export const monitoringResults = pgTable("monitoring_results", {
     errorLog: jsonb("error_log"),
     retryCount: integer("retry_count").default(0).notNull(),
     driveFileId: text("drive_file_id"), // 구글 드라이브 HTML 보고서 파일 ID
-    createdBy: integer("created_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -154,7 +154,7 @@ export const monitoringResults = pgTable("monitoring_results", {
 
 export const notificationLogs = pgTable("notification_logs", {
     id: serial("id").primaryKey(),
-    clientId: integer("client_id").references(() => clients.id),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
     channel: text("channel").default("telegram").notNull(),
     messageType: text("message_type").default("monitoring").notNull(),
     content: text("content").notNull(),

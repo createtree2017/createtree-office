@@ -308,11 +308,15 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
             }
         }
 
-        // FK 제약 해제: users.clientId → NULL, tasks.clientId → NULL
-        await db.update(users).set({ clientId: null }).where(eq(users.clientId, clientId));
-        await db.update(tasks).set({ clientId: null }).where(eq(tasks.clientId, clientId));
+        // FK cascade/set null가 스키마 레벨에서 처리됨:
+        // - users.clientId → set null
+        // - tasks.clientId → cascade
+        // - clientServiceContracts.clientId → cascade
+        // - monitoringTemplates.clientId → cascade
+        // - monitoringResults.clientId → cascade
+        // - notificationLogs.clientId → cascade
 
-        // DB에서 삭제 (clientServiceContracts는 cascade, tasks/users는 위에서 null 처리)
+        // DB에서 삭제 (모든 관련 레코드는 FK onDelete로 자동 처리)
         await db.delete(clients).where(eq(clients.id, clientId));
 
         res.json({

@@ -35,7 +35,12 @@ const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
     };
 
     const handleDelete = async () => {
-        if (!confirm('정말로 이 업무를 삭제하시겠습니까?')) return;
+        const hasProgress = task.status === 'IN_PROGRESS' || task.status === 'COMPLETED';
+        const confirmMsg = hasProgress
+            ? `이 업무에 진행 중인 작성 내용이 있습니다.\n삭제하면 모든 작성 내용도 함께 삭제됩니다.\n\n정말 삭제하시겠습니까?`
+            : '정말로 이 업무를 삭제하시겠습니까?';
+
+        if (!confirm(confirmMsg)) return;
 
         try {
             const response = await fetch(`/api/tasks/${task.id}`, {
@@ -56,6 +61,8 @@ const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
             toast.error('삭제 중 오류가 발생했습니다.');
         }
     };
+
+
 
     const getStatusColor = (status: string) => {
         switch (status) {

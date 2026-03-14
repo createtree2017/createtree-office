@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Play, Pencil, RefreshCw, Square, LayoutTemplate } from 'lucide-react';
 import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
@@ -48,6 +48,7 @@ const TemplatesPage: React.FC = () => {
     const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(null);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const descRef = useRef<HTMLTextAreaElement>(null);
     const [questions, setQuestions] = useState<Question[]>([]);
 
     // ===== 템플릿 삭제 확인 모달 상태 =====
@@ -104,6 +105,13 @@ const TemplatesPage: React.FC = () => {
         setTitle(template.title);
         setDescription(template.description || '');
         setQuestions(template.formSchema);
+        // textarea 높이 자동 조절 (렌더링 후)
+        setTimeout(() => {
+            if (descRef.current) {
+                descRef.current.style.height = 'auto';
+                descRef.current.style.height = descRef.current.scrollHeight + 'px';
+            }
+        }, 50);
     };
 
     const handleDelete = async (id: number, templateTitle: string) => {
@@ -312,7 +320,7 @@ const TemplatesPage: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-[hsl(var(--muted-foreground))] mb-1">템플릿 설명 (선택)</label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 border-b border-[hsl(var(--border))] bg-transparent focus:border-blue-500 focus:outline-none resize-none text-[hsl(var(--foreground))]" placeholder="이 템플릿에 대한 설명을 적어주세요." rows={2} />
+                        <textarea ref={descRef} value={description} onChange={e => setDescription(e.target.value)} onInput={e => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} className="w-full p-2 border-b border-[hsl(var(--border))] bg-transparent focus:border-blue-500 focus:outline-none resize-none overflow-hidden text-[hsl(var(--foreground))]" placeholder="이 템플릿에 대한 설명을 적어주세요." rows={5} />
                     </div>
                 </div>
 
