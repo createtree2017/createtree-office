@@ -134,7 +134,8 @@ export const monitoringTemplates = pgTable("monitoring_templates", {
 
 export const monitoringResults = pgTable("monitoring_results", {
     id: serial("id").primaryKey(),
-    templateId: integer("template_id").references(() => monitoringTemplates.id).notNull(),
+    templateId: integer("template_id").references(() => monitoringTemplates.id, { onDelete: "set null" }),
+    templateName: text("template_name"), // 삭제된 템플릿 이름 보존용
     clientId: integer("client_id").references(() => clients.id).notNull(),
     status: monitoringStatusEnum("status").default("PENDING").notNull(),
     posts: jsonb("posts").$type<any[]>(),
@@ -159,7 +160,7 @@ export const notificationLogs = pgTable("notification_logs", {
     content: text("content").notNull(),
     status: text("status").default("sent").notNull(),
     errorMessage: text("error_message"),
-    templateId: integer("template_id").references(() => monitoringTemplates.id),
-    resultId: integer("result_id").references(() => monitoringResults.id),
+    templateId: integer("template_id").references(() => monitoringTemplates.id, { onDelete: "set null" }),
+    resultId: integer("result_id").references(() => monitoringResults.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });

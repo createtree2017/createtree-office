@@ -65,6 +65,7 @@ const TemplatesPage: React.FC = () => {
     const [monLoading, setMonLoading] = useState(false);
     const [showMonCreate, setShowMonCreate] = useState(false);
     const [editingMonTemplate, setEditingMonTemplate] = useState<MonitoringTemplate | null>(null);
+    const [monClientFilter, setMonClientFilter] = useState<number | null>(null);
 
     // ===== 업무 템플릿 로직 =====
     useEffect(() => {
@@ -252,7 +253,7 @@ const TemplatesPage: React.FC = () => {
     }, []);
 
     const deleteMonTemplate = async (id: number) => {
-        if (!confirm("이 템플릿과 관련 결과를 모두 삭제하시겠습니까?")) return;
+        if (!confirm("이 모니터링 템플릿을 삭제하시겠습니까?\n(기존 모니터링 결과물은 보존됩니다)")) return;
         try {
             const res = await fetch(`${MAPI}/templates/${id}`, { method: "DELETE", headers: getHeaders() });
             if ((await res.json()).success) {
@@ -460,23 +461,63 @@ const TemplatesPage: React.FC = () => {
                 )}
 
                 {/* ========== 모니터링 템플릿 탭 ========== */}
-                {activeTab === 'monitoring' && (
+                {activeTab === 'monitoring' && (() => {
+                    // 템플릿에서 고유 거래처 목록 추출
+                    const uniqueMonClients = Array.from(
+                        new Map(monTemplates.map(t => [t.clientId, monClients.find(c => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
+                    ).map(([id, name]) => ({ id, name }));
+                    const filteredMonTemplates = monClientFilter === null ? monTemplates : monTemplates.filter(t => t.clientId === monClientFilter);
+
+                    return (
                     <div className="space-y-3">
+                        {/* 거래처 필터 바 */}
+                        {!monLoading && uniqueMonClients.length > 1 && (
+                            <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+                                <button
+                                    onClick={() => setMonClientFilter(null)}
+                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                                        monClientFilter === null
+                                            ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                                            : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
+                                    }`}
+                                >
+                                    전체
+                                </button>
+                                {uniqueMonClients.map(c => (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => setMonClientFilter(c.id)}
+                                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                                            monClientFilter === c.id
+                                                ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                                                : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
+                                        }`}
+                                    >
+                                        {c.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         {monLoading ? (
                             <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">불러오는 중...</div>
-                        ) : monTemplates.length === 0 ? (
+                        ) : filteredMonTemplates.length === 0 ? (
                             <div className="text-center py-16 bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))]">
                                 <Activity size={40} className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]" />
-                                <p className="text-[hsl(var(--muted-foreground))]">모니터링 템플릿이 없습니다.</p>
-                                <button
-                                    onClick={() => setShowMonCreate(true)}
-                                    className="mt-3 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold"
-                                >
-                                    새 템플릿 만들기
-                                </button>
+                                <p className="text-[hsl(var(--muted-foreground))]">
+                                    {monClientFilter !== null ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
+                                </p>
+                                {monClientFilter === null && (
+                                    <button
+                                        onClick={() => setShowMonCreate(true)}
+                                        className="mt-3 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold"
+                                    >
+                                        새 템플릿 만들기
+                                    </button>
+                                )}
                             </div>
                         ) : (
-                            monTemplates.map((t) => (
+                            filteredMonTemplates.map((t) => (
                                 <div
                                     key={t.id}
                                     className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-start justify-between"
@@ -548,7 +589,8 @@ const TemplatesPage: React.FC = () => {
                             ))
                         )}
                     </div>
-                )}
+                    );
+                })()}
             </div>
 
             {/* ========== 모니터링 템플릿 생성 모달 ========== */}

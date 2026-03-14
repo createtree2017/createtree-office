@@ -37,7 +37,7 @@ router.get("/templates/:id", authenticateToken, async (req: AuthRequest, res) =>
 router.post("/templates", authenticateToken, authorizeRole(["ADMIN", "MANAGER", "HOSPITAL_ADMIN"]), async (req: AuthRequest, res) => {
     try {
         const user = req.user!;
-        const { name, templateType, clientId, keywords, monitoringScope, searchType, dateRange, collectCount, crawlingMethod, analysisMode, targetPlaces, targetCafes, scheduleEnabled, scheduleCron } = req.body;
+        const { name, templateType, clientId, keywords, monitoringScope, searchType, dateRange, collectCount, crawlingMethod, analysisMode, targetPlaces, targetCafes, scheduleEnabled, scheduleCron, notifyEnabled } = req.body;
 
         // 통합검색은 키워드 필수, 플레이스는 불필요
         if (!name || !clientId) {
@@ -62,6 +62,7 @@ router.post("/templates", authenticateToken, authorizeRole(["ADMIN", "MANAGER", 
             targetCafes: targetCafes || null,
             scheduleEnabled: scheduleEnabled || false,
             scheduleCron: scheduleCron || null,
+            notifyEnabled: notifyEnabled || false,
             createdBy: user.id,
         });
 
@@ -158,9 +159,13 @@ router.get("/results/:id/excel", authenticateToken, async (req: AuthRequest, res
         const result = await monitoringService.getResult(parseInt(req.params.id));
         if (!result) return res.status(404).json({ success: false, message: "결과를 찾을 수 없습니다." });
 
-        // 템플릿 정보 조회
-        const template = await monitoringService.getTemplate(result.templateId);
-        if (!template) return res.status(404).json({ success: false, message: "템플릿을 찾을 수 없습니다." });
+        // 템플릿 정보 조회 (삭제된 경우 fallback)
+        let template: any = result.templateId
+            ? await monitoringService.getTemplate(result.templateId)
+            : null;
+        if (!template) {
+            template = { name: (result as any).templateName || "삭제된 템플릿", templateType: "integrated", monitoringScope: [] };
+        }
 
         const excelBuffer = reportGenerator.generateExcel(
             template as any,
@@ -168,7 +173,8 @@ router.get("/results/:id/excel", authenticateToken, async (req: AuthRequest, res
             (result.statistics as any) || { sentiment_distribution: { positive: 0, neutral: 0, negative: 0, total: 0, percentage: { positive: 0, neutral: 0, negative: 0 } }, summary: "", key_topics: [], positive_points: [], improvement_areas: [], overall_sentiment: "neutral", analysis_method: "fallback", processing_stats: { total_posts: 0, processed_posts: 0 } }
         );
 
-        const fileName = encodeURIComponent(`모니터링_보고서_${template.name}_${new Date().toISOString().split("T")[0]}.xlsx`);
+        const templateName = template.name || "삭제된 템플릿";
+        const fileName = encodeURIComponent(`모니터링_보고서_${templateName}_${new Date().toISOString().split("T")[0]}.xlsx`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
         res.send(excelBuffer);
@@ -184,14 +190,19 @@ router.get("/results/:id/report", authenticateToken, async (req: AuthRequest, re
         const result = await monitoringService.getResult(parseInt(req.params.id));
         if (!result) return res.status(404).json({ success: false, message: "결과를 찾을 수 없습니다." });
 
-        const template = await monitoringService.getTemplate(result.templateId);
-        if (!template) return res.status(404).json({ success: false, message: "템플릿을 찾을 수 없습니다." });
+        // 템플릿 정보 조회 (삭제된 경우 fallback)
+        let template: any = result.templateId
+            ? await monitoringService.getTemplate(result.templateId)
+            : null;
+        if (!template) {
+            template = { name: (result as any).templateName || "삭제된 템플릿", templateType: "integrated", monitoringScope: [] };
+        }
 
         const html = reportGenerator.generateHtml(
             template as any,
             (result.posts as any[]) || [],
             (result.statistics as any) || { sentiment_distribution: { positive: 0, neutral: 0, negative: 0, total: 0, percentage: { positive: 0, neutral: 0, negative: 0 } }, summary: "", key_topics: [], positive_points: [], improvement_areas: [], overall_sentiment: "neutral", analysis_method: "fallback", processing_stats: { total_posts: 0, processed_posts: 0 } },
-            template.name
+            template.name || "삭제된 템플릿"
         );
 
         res.setHeader("Content-Type", "text/html; charset=utf-8");

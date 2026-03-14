@@ -57,6 +57,8 @@ export class MonitoringService {
                 scheduleLastRunAt: monitoringTemplates.scheduleLastRunAt,
                 targetPlaces: monitoringTemplates.targetPlaces,
                 targetCafes: monitoringTemplates.targetCafes,
+                notifyEnabled: monitoringTemplates.notifyEnabled,
+                notifyChannels: monitoringTemplates.notifyChannels,
                 createdAt: monitoringTemplates.createdAt,
                 updatedAt: monitoringTemplates.updatedAt,
             })
@@ -86,7 +88,8 @@ export class MonitoringService {
     }
 
     async deleteTemplate(id: number) {
-        await db.delete(monitoringResults).where(eq(monitoringResults.templateId, id));
+        // monitoringResults, notificationLogs의 templateId는 onDelete: "set null"로 설정되어
+        // 템플릿 삭제 시 자동으로 null로 변경됨 → 결과물은 보존
         await db.delete(monitoringTemplates).where(eq(monitoringTemplates.id, id));
     }
 
@@ -121,6 +124,7 @@ export class MonitoringService {
         // 결과 레코드 생성 (즉시 응답용)
         const [result] = await db.insert(monitoringResults).values({
             templateId: template.id,
+            templateName: template.name,
             clientId: template.clientId,
             status: "RUNNING",
             createdBy: userId,
