@@ -21,11 +21,11 @@ Outscraper API를 통한 구글 플레이스 리뷰 수집이 **2026-03-16부터
 
 ### Outscraper API 호출 결과 (3가지 URL 조합 테스트)
 
-| 테스트 | URL | 엔드포인트 | 결과 |
-|--------|-----|-----------|------|
-| A | `api.app.outscraper.com` | `/maps/reviews-v3` | ❌ 30초 타임아웃 |
-| B | `api.outscraper.cloud` | `/maps/reviews-v3` | ❌ 30초 타임아웃 |
-| C | `api.outscraper.cloud` | `/google-maps-reviews` | ❌ 30초 타임아웃 |
+| 테스트 | URL                      | 엔드포인트             | 결과             |
+| ------ | ------------------------ | ---------------------- | ---------------- |
+| A      | `api.app.outscraper.com` | `/maps/reviews-v3`     | ❌ 30초 타임아웃 |
+| B      | `api.outscraper.cloud`   | `/maps/reviews-v3`     | ❌ 30초 타임아웃 |
+| C      | `api.outscraper.cloud`   | `/google-maps-reviews` | ❌ 30초 타임아웃 |
 
 ### 결론
 
@@ -39,11 +39,11 @@ Outscraper API를 통한 구글 플레이스 리뷰 수집이 **2026-03-16부터
 
 ### 대안 비교
 
-| 방식 | 장점 | 단점 |
-|------|------|------|
-| Outscraper (현재) | 대량 수집 가능 | ❌ 외부 서비스 장애에 무방비 |
-| 자체 크롤링 (Puppeteer) | 외부 의존 없음 | ❌ 구글 봇 감지 강력, 유지보수 부담 |
-| **Google Places API (공식)** | **안정적, 월 $200 무료 크레딧** | 리뷰 최대 5개 |
+| 방식                         | 장점                            | 단점                                |
+| ---------------------------- | ------------------------------- | ----------------------------------- |
+| Outscraper (현재)            | 대량 수집 가능                  | ❌ 외부 서비스 장애에 무방비        |
+| 자체 크롤링 (Puppeteer)      | 외부 의존 없음                  | ❌ 구글 봇 감지 강력, 유지보수 부담 |
+| **Google Places API (공식)** | **안정적, 월 $200 무료 크레딧** | 리뷰 최대 5개                       |
 
 ### 결정 배경
 
@@ -81,6 +81,7 @@ Outscraper API를 통한 구글 플레이스 리뷰 수집이 **2026-03-16부터
 - **날짜 변환**: `r.time` (Unix timestamp) → ISO 8601 변환
 
 **Outscraper 코드 보존**:
+
 - 기존 `crawlGooglePlace()` → `crawlGooglePlaceOutscraper()`로 이름 변경
 - Outscraper 관련 메서드 (`submitAsyncRequest`, `pollForResults`, `parseOutscraperData`) 전체 보존
 - Google Places API 실패 시 자동으로 Outscraper 폴백 호출
@@ -96,21 +97,23 @@ Outscraper API를 통한 구글 플레이스 리뷰 수집이 **2026-03-16부터
 
 ### 4.3 하드코딩 제거 (3파일)
 
-| 파일 | 변경 전 | 변경 후 |
-|------|---------|---------|
-| `tasks.ts` | `GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID \|\| '1G-Wyp42A3...'` | `\|\| ''` |
-| `drive.ts` | `GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID \|\| '1SI_8POn6S...'` | `\|\| ''` |
+| 파일        | 변경 전                                                    | 변경 후   |
+| ----------- | ---------------------------------------------------------- | --------- |
+| `tasks.ts`  | `GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID \|\| '1G-Wyp42A3...'` | `\|\| ''` |
+| `drive.ts`  | `GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID \|\| '1SI_8POn6S...'` | `\|\| ''` |
 | `client.ts` | `GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID \|\| '1SI_8POn6S...'` | `\|\| ''` |
-| `tasks.ts` | `GOOGLE_SHARED_DRIVE_ID \|\| '0AGA9ZFf...'` | `\|\| ''` |
+| `tasks.ts`  | `GOOGLE_SHARED_DRIVE_ID \|\| '0AGA9ZFf...'`                | `\|\| ''` |
 
 ### 4.4 환경변수 정리
 
 **로컬 `.env` 추가**:
+
 ```
 GOOGLE_SHARED_DRIVE_ID=0AGA9ZFf_x1KWUk9PVA
 ```
 
 **Railway 배포 환경에 추가**:
+
 ```
 GOOGLE_PLACES_API_KEY=AIzaSyDRfBdbozLxNUePywlv3EEGCtDmjEK-Pg4
 GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID=1G-Wyp42A3OzmwxadzXsiyLIN_TrOFtYz
@@ -153,34 +156,34 @@ GOOGLE_SHARED_DRIVE_ID=0AGA9ZFf_x1KWUk9PVA
 
 ## 6. New API vs Legacy API 선택 이유
 
-| 기능 | New API (`places.googleapis.com/v1`) | Legacy API (`maps.googleapis.com/maps/api`) |
-|------|--------------------------------------|---------------------------------------------|
-| 장소 검색 | ✅ 사용 | - |
-| 리뷰 조회 | - | ✅ 사용 |
-| 리뷰 최신순 정렬 | ❌ 미지원 | ✅ `reviews_sort=newest` |
-| 리뷰 한국어 원문 | 번역본 기본 (`text.text`) | ✅ 한국어 원문 (`text`) |
-| 공식 지원 | 현재 주력 | 계속 유지 (deprecated 아님) |
-| 동일 API 키 | ✅ | ✅ |
-| 동일 과금 | ✅ | ✅ |
+| 기능             | New API (`places.googleapis.com/v1`) | Legacy API (`maps.googleapis.com/maps/api`) |
+| ---------------- | ------------------------------------ | ------------------------------------------- |
+| 장소 검색        | ✅ 사용                              | -                                           |
+| 리뷰 조회        | -                                    | ✅ 사용                                     |
+| 리뷰 최신순 정렬 | ❌ 미지원                            | ✅ `reviews_sort=newest`                    |
+| 리뷰 한국어 원문 | 번역본 기본 (`text.text`)            | ✅ 한국어 원문 (`text`)                     |
+| 공식 지원        | 현재 주력                            | 계속 유지 (deprecated 아님)                 |
+| 동일 API 키      | ✅                                   | ✅                                          |
+| 동일 과금        | ✅                                   | ✅                                          |
 
 ---
 
 ## 7. 비용 구조
 
-| 규모 | 일일 요청 | 월간 요청 | 월 비용 | $200 무료 크레딧 |
-|------|----------|----------|---------|-----------------|
-| 현재 (4업체) | 4건 | ~120건 | ~$2 | ✅ 충분 |
-| 중간 (10업체) | 10건 | ~300건 | ~$5 | ✅ 충분 |
-| 목표 (100업체) | 100건 | ~3,000건 | ~$51 | ✅ 충분 |
+| 규모           | 일일 요청 | 월간 요청 | 월 비용 | $200 무료 크레딧 |
+| -------------- | --------- | --------- | ------- | ---------------- |
+| 현재 (4업체)   | 4건       | ~120건    | ~$2     | ✅ 충분          |
+| 중간 (10업체)  | 10건      | ~300건    | ~$5     | ✅ 충분          |
+| 목표 (100업체) | 100건     | ~3,000건  | ~$51    | ✅ 충분          |
 
 ---
 
 ## 8. 향후 참고사항
 
-| # | 항목 |
-|---|------|
-| 1 | **Outscraper $50 크레딧**: 장애 해결 후 대량 수집(월간 심층 분석)에 활용 가능. `crawlGooglePlaceOutscraper()` 메서드로 직접 호출 가능 |
-| 2 | **Outscraper 서비스 상태**: `outscraper.com` 상단 "Service Status" → "All Systems Operational + Active incidents" 확인 |
-| 3 | **리뷰 5개 제한**: Google Places API 공식 제한. 더 많은 리뷰가 필요하면 Outscraper 활용 |
-| 4 | **Legacy API 지속성**: Google이 Legacy API를 deprecated하지 않는 한 계속 사용 가능. New API가 정렬을 지원하면 전환 고려 |
-| 5 | **Railway 환경변수 동기화**: 로컬 `.env`에 변수 추가 시 Railway Variables에도 반드시 반영 필요 |
+| #   | 항목                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Outscraper $50 크레딧**: 장애 해결 후 대량 수집(월간 심층 분석)에 활용 가능. `crawlGooglePlaceOutscraper()` 메서드로 직접 호출 가능 |
+| 2   | **Outscraper 서비스 상태**: `outscraper.com` 상단 "Service Status" → "All Systems Operational + Active incidents" 확인                |
+| 3   | **리뷰 5개 제한**: Google Places API 공식 제한. 더 많은 리뷰가 필요하면 Outscraper 활용                                               |
+| 4   | **Legacy API 지속성**: Google이 Legacy API를 deprecated하지 않는 한 계속 사용 가능. New API가 정렬을 지원하면 전환 고려               |
+| 5   | **Railway 환경변수 동기화**: 로컬 `.env`에 변수 추가 시 Railway Variables에도 반드시 반영 필요                                        |

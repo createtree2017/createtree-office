@@ -177,7 +177,7 @@ export class MonitoringService {
                                     console.warn(`⚠️ 구글 플레이스 URL 파싱 실패: ${place.url}`);
                                     continue;
                                 }
-                                console.log(`🔍 구글 플레이스 수집 (Google Places API): ${googleQuery}`);
+                                console.log(`🔍 구글 플레이스 수집 (Outscraper 기본): ${googleQuery}`);
                                 reviews = await this.googlePlaceCollector.crawlGooglePlace(googleQuery, template.collectCount);
 
                             } else if (place.platform === 'kakaomap') {
