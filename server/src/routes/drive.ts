@@ -16,7 +16,7 @@ const upload = multer({
 
 const router = express.Router();
 
-const MASTER_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1SI_8POn6S3YqdEcrYIbFSzaU_r2fw5KI'; // 변경된 공유 드라이브 내 "거래처 폴더" ID
+const MASTER_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '';
 
 const getClientDriveFolderId = async (clientId: number | null | undefined) => {
     if (!clientId) return null;

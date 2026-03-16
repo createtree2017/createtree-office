@@ -6,8 +6,8 @@ import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { google } from "googleapis";
 
 const router = Router();
-const MASTER_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1G-Wyp42A3OzmwxadzXsiyLIN_TrOFtYz';
-const SHARED_DRIVE_ID = process.env.GOOGLE_SHARED_DRIVE_ID || '0AGA9ZFf_x1KWUk9PVA';
+const MASTER_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '';
+const SHARED_DRIVE_ID = process.env.GOOGLE_SHARED_DRIVE_ID || '';
 
 // 구글 드라이브 폴더 생성 헬퍼 함수 (Shared Drive 지원)
 async function createDriveFolder(folderName: string, parentFolderId: string): Promise<string | null> {
