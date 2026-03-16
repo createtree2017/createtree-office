@@ -8,7 +8,7 @@ import multer from "multer";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }); // 최대 20MB
-const CLIENTS_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '1SI_8POn6S3YqdEcrYIbFSzaU_r2fw5KI';
+const CLIENTS_ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID || '';
 
 // ────────────────────────────────────────────
 // 공통 Drive 헬퍼

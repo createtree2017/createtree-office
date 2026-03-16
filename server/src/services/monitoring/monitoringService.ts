@@ -171,13 +171,13 @@ export class MonitoringService {
                             let reviews: any[] = [];
 
                             if (place.platform === 'googleplace') {
-                                // 구글 플레이스 — Outscraper API (안정적, 봇 감지 없음)
+                                // 구글 플레이스 — Google Places API (공식, 실패 시 Outscraper 폴백)
                                 const googleQuery = this.googlePlaceCollector.extractGoogleQuery(place.url);
                                 if (!googleQuery) {
                                     console.warn(`⚠️ 구글 플레이스 URL 파싱 실패: ${place.url}`);
                                     continue;
                                 }
-                                console.log(`🔍 구글 플레이스 수집 (Outscraper): ${googleQuery}`);
+                                console.log(`🔍 구글 플레이스 수집 (Google Places API): ${googleQuery}`);
                                 reviews = await this.googlePlaceCollector.crawlGooglePlace(googleQuery, template.collectCount);
 
                             } else if (place.platform === 'kakaomap') {

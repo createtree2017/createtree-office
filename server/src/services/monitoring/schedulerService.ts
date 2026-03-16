@@ -10,7 +10,7 @@ import { eq, and } from "drizzle-orm";
 interface ScheduleEntry {
     templateId: number;
     cronExpression: string;
-    lastRunMinute: number;  // 마지막 실행된 분 (중복 실행 방지)
+    lastRunKey: string;  // 마지막 실행 키 ("YYYY-MM-DD HH:mm" 형태, 날짜 포함 중복 실행 방지)
 }
 
 export class SchedulerService {
@@ -52,7 +52,7 @@ export class SchedulerService {
         this.schedules.set(templateId, {
             templateId,
             cronExpression,
-            lastRunMinute: -1,
+            lastRunKey: "",
         });
         this.failCounts.set(templateId, 0);
         console.log(`✅ 스케줄 등록: 템플릿 #${templateId} → ${cronExpression}`);
@@ -69,16 +69,17 @@ export class SchedulerService {
 
         this.tickInterval = setInterval(() => {
             const now = new Date();
-            const currentMinute = now.getHours() * 60 + now.getMinutes(); // 오늘의 분 (0~1439)
+            // 날짜+시간 키로 중복 실행 방지 ("2026-03-16 09:00" 형태)
+            const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
             for (const [templateId, entry] of this.schedules) {
-                // 이미 이 분에 실행했으면 스킵
-                if (entry.lastRunMinute === currentMinute) continue;
+                // 이미 이 날짜+분에 실행했으면 스킵
+                if (entry.lastRunKey === currentKey) continue;
 
                 // cron 표현식이 현재 시각과 매치하는지 확인
                 if (this.shouldRun(entry.cronExpression, now)) {
-                    entry.lastRunMinute = currentMinute;
-                    console.log(`🔄 [스케줄] 자동 실행 트리거: 템플릿 #${templateId} (${now.toLocaleString("ko-KR")})`);
+                    entry.lastRunKey = currentKey;
+                    console.log(`🔄 [스케줄] 자동 실행 트리거: 템플릿 #${templateId} (${currentKey})`);
 
                     // 비동기 실행 — 절대 ticker를 블로킹하지 않음
                     this.safeExecute(templateId).catch(() => {});
@@ -181,7 +182,7 @@ export class SchedulerService {
             tasks: Array.from(this.schedules.entries()).map(([id, entry]) => ({
                 templateId: id,
                 cronExpression: entry.cronExpression,
-                lastRunMinute: entry.lastRunMinute,
+                lastRunKey: entry.lastRunKey,
                 failCount: this.failCounts.get(id) || 0,
             })),
         };
