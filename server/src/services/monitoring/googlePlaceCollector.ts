@@ -1,65 +1,82 @@
 import axios from "axios";
 import type { PostData } from "./types.js";
 
-// ===== Google Places API (공식 — 기본) =====
-const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
-const PLACES_API_BASE = "https://places.googleapis.com/v1";
-
-// ===== Outscraper API (대량 수집용 — 보조) =====
+// ===== Outscraper API (기본 — 대량 수집) =====
 const OUTSCRAPER_API_KEY = process.env.OUTSCRAPER_API_KEY || "";
 const OUTSCRAPER_API_BASE = "https://api.app.outscraper.com";
 const POLL_INTERVAL_MS = 15000;
-const MAX_POLL_ATTEMPTS = 20;
+const MAX_POLL_ATTEMPTS = 3;
+
+// ===== Google Places API (공식 — 폴백) =====
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
+const PLACES_API_BASE = "https://places.googleapis.com/v1";
 
 /**
  * 구글 플레이스 리뷰 수집기
  * 
- * 기본: Google Places API (공식, 안정적, 최대 5개 리뷰)
- * 보조: Outscraper SaaS API (대량 수집용, 유지)
+ * 기본: Outscraper SaaS API (대량 수집 가능, 수십~수백 개 리뷰)
+ * 폴백: Google Places API (공식, 안정적, 최대 5개 리뷰)
  */
 export class GooglePlaceCollector {
 
     // ================================================================
-    //  ★ 기본 수집 — Google Places API (공식)
+    //  ★ 기본 진입점 — Outscraper 기본 + Google Places API 폴백
     // ================================================================
 
     /**
      * 구글 리뷰 수집 (기본 진입점)
-     * Google Places API를 사용하여 최신 리뷰 최대 5개 수집
+     * Outscraper API 우선 → 실패 시 Google Places API 폴백
      */
     async crawlGooglePlace(query: string, maxReviews: number = 5): Promise<PostData[]> {
-        console.log(`🔍 구글 플레이스 리뷰 수집 (Google Places API): query=${query}, max=${maxReviews}`);
+        console.log(`🔍 구글 플레이스 리뷰 수집 (Outscraper 기본): query=${query}, max=${maxReviews}`);
 
-        if (!GOOGLE_PLACES_API_KEY) {
-            console.error("❌ GOOGLE_PLACES_API_KEY가 설정되지 않았습니다.");
-            // fallback: Outscraper 시도
-            console.log("🔄 Outscraper API로 폴백 시도...");
-            return this.crawlGooglePlaceOutscraper(query, maxReviews);
+        // Step 1: Outscraper API 시도
+        if (OUTSCRAPER_API_KEY) {
+            try {
+                const results = await this.crawlGooglePlaceOutscraper(query, maxReviews);
+                if (results.length > 0) {
+                    return results;
+                }
+                console.warn("⚠️ Outscraper에서 리뷰를 가져오지 못했습니다. Google Places API로 폴백...");
+            } catch (error: any) {
+                console.error(`❌ Outscraper API 실패: ${error.message}`);
+                console.log("🔄 Google Places API로 폴백 시도...");
+            }
+        } else {
+            console.warn("⚠️ OUTSCRAPER_API_KEY가 설정되지 않았습니다. Google Places API로 폴백...");
         }
 
+        // Step 2: Google Places API 폴백
+        return this.crawlGooglePlaceFallback(query, maxReviews);
+    }
+
+    /**
+     * Google Places API 폴백 수집
+     */
+    private async crawlGooglePlaceFallback(query: string, maxReviews: number): Promise<PostData[]> {
+        if (!GOOGLE_PLACES_API_KEY) {
+            console.error("❌ GOOGLE_PLACES_API_KEY도 설정되지 않았습니다. 수집 불가.");
+            return [];
+        }
+
+        console.log(`🔄 Google Places API 폴백 수집: query=${query}`);
         try {
-            // Step 1: 장소 검색 → Place ID 확보
             const placeId = await this.findPlaceId(query);
             if (!placeId) {
-                console.warn("⚠️ Google Places API에서 장소를 찾지 못했습니다. Outscraper로 폴백...");
-                return this.crawlGooglePlaceOutscraper(query, maxReviews);
+                console.warn("⚠️ Google Places API에서 장소를 찾지 못했습니다.");
+                return [];
             }
 
-            // Step 2: Place Details에서 리뷰 가져오기
             const reviews = await this.getPlaceReviews(placeId);
             if (!reviews || reviews.length === 0) {
                 console.warn("⚠️ Google Places API에서 리뷰가 없습니다.");
                 return [];
             }
 
-            // Step 3: PostData 형태로 변환
             return this.convertGoogleReviews(reviews, query, placeId, maxReviews);
-
         } catch (error: any) {
-            console.error(`❌ Google Places API 실패: ${error.message}`);
-            // fallback: Outscraper
-            console.log("🔄 Outscraper API로 폴백 시도...");
-            return this.crawlGooglePlaceOutscraper(query, maxReviews);
+            console.error(`❌ Google Places API 폴백도 실패: ${error.message}`);
+            return [];
         }
     }
 
