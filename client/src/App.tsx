@@ -12,6 +12,9 @@ import DrivePage from './pages/DrivePage';
 import TemplatesPage from './pages/TemplatesPage';
 import TaskResponsePage from './pages/TaskResponsePage';
 import MonitoringPage from './pages/MonitoringPage';
+import ServiceProductsPage from './pages/ServiceProductsPage';
+import QuotationsPage from './pages/QuotationsPage';
+import ContractsPage from './pages/ContractsPage';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import NavBar from './components/NavBar';
@@ -54,6 +57,9 @@ function App() {
                         <Route path="/monitoring" element={<MonitoringPage />} />
                         <Route path="/admin" element={<AdminPage />} />
                         <Route path="/templates" element={<TemplatesPage />} />
+                        <Route path="/services" element={<ServiceProductsPage />} />
+                        <Route path="/quotations" element={<QuotationsPage />} />
+                        <Route path="/contracts" element={<ContractsPage />} />
 
                         <Route path="/mypage" element={<MyPage />} />
                     </Route>

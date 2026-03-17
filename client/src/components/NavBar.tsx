@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate, Activity } from 'lucide-react';
+import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate, Activity, Package, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // 다크모드 훅
@@ -67,6 +67,9 @@ const NavBar = () => {
 
         ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
             { path: '/templates', label: '템플릿 관리', icon: LayoutTemplate },
+            { path: '/services', label: '서비스 상품', icon: Package },
+            { path: '/quotations', label: '견적 관리', icon: FileText },
+            { path: '/contracts', label: '계약 관리', icon: FileText },
         ] : []),
 
         ...(user?.role === 'ADMIN' ? [

@@ -164,3 +164,207 @@ export const notificationLogs = pgTable("notification_logs", {
     resultId: integer("result_id").references(() => monitoringResults.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ===== 서비스 상품 마스터 시스템 =====
+
+export const billingTypeEnum = pgEnum("billing_type", [
+    "monthly",       // 월정액
+    "per_event",     // 건당
+    "one_time",      // 일회성
+    "quote_based",   // 견적 기반 (문의/컨설팅)
+]);
+
+export const priceUnitEnum = pgEnum("price_unit", [
+    "per_month",     // 월 단위
+    "per_event",     // 회 단위
+    "per_person",    // 인당
+    "per_item",      // 건당
+    "one_time",      // 일회성
+]);
+
+export const itemCategoryEnum = pgEnum("item_category", [
+    "fixed",         // 고정비 (필수)
+    "variable",      // 변동비 (선택/실적 기반)
+]);
+
+// 서비스 상품
+export const services = pgTable("services", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    billingType: billingTypeEnum("billing_type").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    metadata: jsonb("metadata"), // 서비스별 추가 설정 (JSON)
+    linkedTaskTemplateId: integer("linked_task_template_id")
+        .references(() => taskTemplates.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// 서비스 등급/구간 (예: 10~20명, 1~5명)
+export const serviceTiers = pgTable("service_tiers", {
+    id: serial("id").primaryKey(),
+    serviceId: integer("service_id")
+        .references(() => services.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    minQuantity: integer("min_quantity"),
+    maxQuantity: integer("max_quantity"),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 비용 항목 (예: 운영비, 상품비용, 유튜브 롱폼)
+export const serviceItems = pgTable("service_items", {
+    id: serial("id").primaryKey(),
+    serviceId: integer("service_id")
+        .references(() => services.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    category: itemCategoryEnum("category").notNull(),
+    isRequired: boolean("is_required").default(true).notNull(),
+    priceUnit: priceUnitEnum("price_unit").notNull(),
+    unitLabel: text("unit_label"), // "월", "회", "명", "건"
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 등급별 가격 (항목 × 등급 교차. tierId=null이면 전 등급 공통 단가)
+export const serviceItemPrices = pgTable("service_item_prices", {
+    id: serial("id").primaryKey(),
+    itemId: integer("item_id")
+        .references(() => serviceItems.id, { onDelete: "cascade" }).notNull(),
+    tierId: integer("tier_id")
+        .references(() => serviceTiers.id, { onDelete: "cascade" }),
+    price: integer("price").notNull(), // 만원 단위
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 계약 할인 정책 (회사 전체 정책)
+export const contractDiscountPolicies = pgTable("contract_discount_policies", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    minMonths: integer("min_months").notNull(),
+    discountRate: integer("discount_rate").notNull(), // 백분율 (5 = 5%)
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ===== 견적서 시스템 =====
+
+export const quotationStatusEnum = pgEnum("quotation_status", [
+    "draft",       // 작성 중
+    "sent",        // 발송됨
+    "accepted",    // 수락됨
+    "rejected",    // 거절됨
+    "expired",     // 만료됨
+]);
+
+export const paymentMethodEnum = pgEnum("payment_method", [
+    "lump_sum",       // 일괄 결제
+    "installment",    // 분할 결제 (계약기간 월할)
+    "monthly_settle", // 월말 실적 정산
+]);
+
+// 견적서
+export const quotations = pgTable("quotations", {
+    id: serial("id").primaryKey(),
+    quotationNumber: text("quotation_number").notNull().unique(), // QT-YYYYMMDD-NNN
+    clientId: integer("client_id")
+        .references(() => clients.id, { onDelete: "cascade" }).notNull(),
+    title: text("title").notNull(),
+    contractMonths: integer("contract_months").notNull(), // 계약 기간 (개월)
+    discountPolicyId: integer("discount_policy_id")
+        .references(() => contractDiscountPolicies.id, { onDelete: "set null" }),
+    discountApplied: boolean("discount_applied").default(false).notNull(),
+    subtotal: integer("subtotal").default(0).notNull(),       // 할인 전 총액 (만원)
+    discountAmount: integer("discount_amount").default(0).notNull(), // 할인 금액 (만원)
+    totalAmount: integer("total_amount").default(0).notNull(), // 최종 금액 (만원)
+    monthlyAmount: integer("monthly_amount").default(0).notNull(), // 월 청구 금액 (만원)
+    notes: text("notes"),
+    status: quotationStatusEnum("status").default("draft").notNull(),
+    validUntil: date("valid_until"),
+    createdBy: integer("created_by")
+        .references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// 견적 항목 (가격 시점 보존 — 서비스명/등급명/단가를 별도 저장)
+export const quotationItems = pgTable("quotation_items", {
+    id: serial("id").primaryKey(),
+    quotationId: integer("quotation_id")
+        .references(() => quotations.id, { onDelete: "cascade" }).notNull(),
+    serviceId: integer("service_id").references(() => services.id, { onDelete: "set null" }),
+    serviceName: text("service_name").notNull(), // 시점 보존
+    tierId: integer("tier_id"),
+    tierName: text("tier_name"),
+    itemId: integer("item_id"),
+    itemName: text("item_name").notNull(),
+    itemCategory: text("item_category").notNull(), // fixed / variable
+    itemPriceUnit: text("item_price_unit").notNull(),
+    quantity: integer("quantity").default(1).notNull(),
+    unitPrice: integer("unit_price").notNull(), // 만원 단위
+    amount: integer("amount").notNull(), // quantity * unitPrice
+    isRequired: boolean("is_required").default(true).notNull(),
+    paymentMethod: paymentMethodEnum("payment_method"), // null이면 기본 월정산
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 견적 내 서비스별 설정 (서비스 단위 메타 정보)
+export const quotationServiceConfigs = pgTable("quotation_service_configs", {
+    id: serial("id").primaryKey(),
+    quotationId: integer("quotation_id")
+        .references(() => quotations.id, { onDelete: "cascade" }).notNull(),
+    serviceId: integer("service_id").references(() => services.id, { onDelete: "set null" }),
+    serviceName: text("service_name").notNull(),
+    billingType: text("billing_type").notNull(),
+    selectedTierId: integer("selected_tier_id"),
+    selectedTierName: text("selected_tier_name"),
+    eventFrequency: text("event_frequency"), // 예: "2개월1회", "월1회"
+    eventPaymentMethod: paymentMethodEnum("event_payment_method"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ===== 계약서 시스템 =====
+
+export const contractStatusEnum = pgEnum("contract_status", [
+    "draft",       // 초안
+    "signed",      // 서명 완료
+    "active",      // 활성 (진행 중)
+    "expired",     // 만료
+    "terminated",  // 해지
+]);
+
+// 계약서
+export const contracts = pgTable("contracts", {
+    id: serial("id").primaryKey(),
+    contractNumber: text("contract_number").notNull().unique(), // CT-YYYYMMDD-NNN
+    quotationId: integer("quotation_id")
+        .references(() => quotations.id, { onDelete: "set null" }),
+    clientId: integer("client_id")
+        .references(() => clients.id, { onDelete: "cascade" }).notNull(),
+    title: text("title").notNull(),
+    contractMonths: integer("contract_months").notNull(), // 0 = 단건
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    subtotal: integer("subtotal").default(0).notNull(),
+    discountAmount: integer("discount_amount").default(0).notNull(),
+    totalAmount: integer("total_amount").default(0).notNull(),
+    monthlyAmount: integer("monthly_amount").default(0).notNull(),
+    notes: text("notes"),
+    commonTerms: text("common_terms"),     // 공통 계약 내용
+    specialTerms: text("special_terms"),   // 업체별 특별 조항
+    status: contractStatusEnum("status").default("draft").notNull(),
+    signedAt: timestamp("signed_at"),
+    createdBy: integer("created_by")
+        .references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
