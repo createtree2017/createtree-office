@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { Readable } from "stream";
 import * as XLSX from "xlsx";
+import { chromium } from "playwright";
 import type { PostData, AnalysisResult, MonitoringTemplate } from "./types.js";
 
 /**
@@ -117,6 +118,28 @@ export class ReportGenerator {
         XLSX.utils.book_append_sheet(wb, wsPosts, "게시글 목록");
 
         return Buffer.from(XLSX.write(wb, { bookType: "xlsx", type: "buffer" }));
+    }
+
+    // PDF 보고서 생성 (Playwright HTML→PDF)
+    async generatePdf(template: MonitoringTemplate, posts: PostData[], analysis: AnalysisResult, clientName: string): Promise<Buffer> {
+        const html = this.generateHtml(template, posts, analysis, clientName);
+        let browser;
+        try {
+            browser = await chromium.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            });
+            const page = await browser.newPage();
+            await page.setContent(html, { waitUntil: 'networkidle' });
+            const pdfBuffer = await page.pdf({
+                format: 'A4',
+                margin: { top: '16px', right: '16px', bottom: '16px', left: '16px' },
+                printBackground: true,
+            });
+            return Buffer.from(pdfBuffer);
+        } finally {
+            if (browser) await browser.close();
+        }
     }
 
     // HTML 보고서 생성

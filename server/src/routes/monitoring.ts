@@ -212,6 +212,39 @@ router.get("/results/:id/report", authenticateToken, async (req: AuthRequest, re
     }
 });
 
+// PDF 보고서 다운로드
+router.get("/results/:id/pdf", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const result = await monitoringService.getResult(parseInt(req.params.id));
+        if (!result) return res.status(404).json({ success: false, message: "결과를 찾을 수 없습니다." });
+
+        let template: any = result.templateId
+            ? await monitoringService.getTemplate(result.templateId)
+            : null;
+        if (!template) {
+            template = { name: (result as any).templateName || "삭제된 템플릿", templateType: "integrated", monitoringScope: [] };
+        }
+
+        const fallbackStats = { sentiment_distribution: { positive: 0, neutral: 0, negative: 0, total: 0, percentage: { positive: 0, neutral: 0, negative: 0 } }, summary: "", key_topics: [], positive_points: [], improvement_areas: [], overall_sentiment: "neutral", analysis_method: "fallback", processing_stats: { total_posts: 0, processed_posts: 0 } };
+        const templateName = template.name || "삭제된 템플릿";
+
+        const pdfBuffer = await reportGenerator.generatePdf(
+            template as any,
+            (result.posts as any[]) || [],
+            (result.statistics as any) || fallbackStats,
+            templateName
+        );
+
+        const fileName = encodeURIComponent(`모니터링_보고서_${templateName}_${new Date().toISOString().split("T")[0]}.pdf`);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+        res.send(pdfBuffer);
+    } catch (error: any) {
+        console.error("PDF 다운로드 오류:", error);
+        res.status(500).json({ success: false, message: "PDF 생성 실패" });
+    }
+});
+
 // 결과 삭제 (다건)
 router.delete("/results", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req: AuthRequest, res) => {
     try {

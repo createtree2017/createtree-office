@@ -290,9 +290,20 @@ export class MonitoringService {
 
             console.log(`🎉 모니터링 완료 - ${template.name} (${Date.now() - startTime}ms)`);
 
-            // Step 5: Telegram 알림 발송
+            // Step 5: Telegram 알림 발송 (PDF 보고서 첨부)
             try {
                 if ((template as any).notifyEnabled) {
+                    // PDF 보고서 생성
+                    let pdfBuffer: Buffer | null = null;
+                    try {
+                        const [client] = await db.select().from(clients).where(eq(clients.id, template.clientId));
+                        const clientName = client?.name || template.name;
+                        pdfBuffer = await this.reportGenerator.generatePdf(template, posts, analysis, clientName);
+                        console.log(`📄 PDF 보고서 생성 완료 (${(pdfBuffer.length / 1024).toFixed(0)}KB)`);
+                    } catch (pdfErr) {
+                        console.error("PDF 생성 실패 (텍스트 알림으로 대체):", pdfErr);
+                    }
+
                     const { telegramService } = await import("../notification/telegramService.js");
                     await telegramService.sendMonitoringAlert(
                         template.clientId,
@@ -302,6 +313,7 @@ export class MonitoringService {
                         resultId,
                         template.id,
                         analysis.sentiment_distribution,
+                        pdfBuffer,
                     );
                 }
             } catch (notifyErr) {
