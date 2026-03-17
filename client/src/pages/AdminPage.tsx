@@ -76,6 +76,9 @@ const AdminPage = () => {
     const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]); // 다중 선택
     const [isAddingContract, setIsAddingContract] = useState(false); // 중복 클릭 방지
 
+    // ===== 활성 계약 서비스 상품 상태 =====
+    const [activeServicesMap, setActiveServicesMap] = useState<Record<number, { contractNumber: string; services: { serviceName: string; items: any[] }[] } | null>>({});
+
     const fetchUsers = async () => {
         try {
             const response = await fetch('/api/admin/users', {
@@ -102,7 +105,7 @@ const AdminPage = () => {
             const result = await response.json();
             if (result.success) {
                 setClients(result.data);
-                result.data.forEach((c: Client) => fetchContracts(c.id));
+                result.data.forEach((c: Client) => { fetchContracts(c.id); fetchActiveServices(c.id); });
             }
         } catch (err) {
             console.error('거래처 목록 불러오기 실패:', err);
@@ -137,6 +140,20 @@ const AdminPage = () => {
             const data = await res.json();
             if (data.success) {
                 setContractsMap(prev => ({ ...prev, [clientId]: data.data }));
+            }
+        } catch { /* ignore */ }
+    };
+
+    const fetchActiveServices = async (clientId: number) => {
+        try {
+            const res = await fetch(`/api/contracts/client/${clientId}/services`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success && data.data.length > 0) {
+                setActiveServicesMap(prev => ({ ...prev, [clientId]: { contractNumber: data.contractNumber, services: data.data } }));
+            } else {
+                setActiveServicesMap(prev => ({ ...prev, [clientId]: null }));
             }
         } catch { /* ignore */ }
     };
@@ -702,6 +719,14 @@ const AdminPage = () => {
                                                         >
                                                             📎 계약서 첨부됨
                                                         </a>
+                                                    ) : client.contractFileName ? (
+                                                        <a
+                                                            href="/contracts"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/40 rounded-full text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                                                            title={client.contractFileName}
+                                                        >
+                                                            📋 계약서 정보됨
+                                                        </a>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-300 dark:text-slate-600">⚠️ 계약서 없음</span>
                                                     )}
@@ -746,7 +771,30 @@ const AdminPage = () => {
 
                                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">계약 서비스</p>
+                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">실행 서비스 상품</p>
+                                                </div>
+                                                {activeServicesMap[client.id] ? (
+                                                    <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                                                        {activeServicesMap[client.id]!.services.map((svc, idx) => (
+                                                            <span
+                                                                key={idx}
+                                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-300 rounded-full text-[10px] font-bold"
+                                                                title={svc.items.map(i => i.itemName).join(', ')}
+                                                            >
+                                                                ✅ {svc.serviceName}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">활성 계약 서비스 없음</span>
+                                                )}
+                                            </div>
+
+                                            {/* ===== 기존 템플릿 계약 서비스 (숨김 처리) ===== */}
+                                            {/* 필요 시 아래 주석을 해제하여 활성화
+                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">매뉴얼 서비스</p>
                                                     {addingContractFor !== client.id && (
                                                         <button
                                                             onClick={() => { setAddingContractFor(client.id); setSelectedTemplateIds([]); }}
@@ -823,6 +871,7 @@ const AdminPage = () => {
                                                     )}
                                                 </div>
                                             </div>
+                                            */}
 
                                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
                                                 <p className="text-[11px] text-slate-400 font-medium break-all flex flex-col gap-1">

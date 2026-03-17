@@ -16,6 +16,7 @@
         "postinstall": "npm install --prefix client && npm install --prefix server"
     },
     "dependencies": {
-        "concurrently": "^8.2.2"
+        "concurrently": "^8.2.2",
+        "html2pdf.js": "^0.14.0"
     }
 }
