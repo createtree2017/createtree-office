@@ -30,7 +30,30 @@ class TelegramService {
         }
     }
 
-    /** 모니터링 완료 알림 발송 */
+    /** PDF 문서 첨부 발송 */
+    async sendDocument(chatId: string, pdfBuffer: Buffer, fileName: string, caption?: string): Promise<boolean> {
+        try {
+            const FormData = (await import("form-data")).default;
+            const form = new FormData();
+            form.append("chat_id", chatId);
+            form.append("document", pdfBuffer, { filename: fileName, contentType: "application/pdf" });
+            if (caption) {
+                form.append("caption", caption);
+                form.append("parse_mode", "HTML");
+            }
+
+            await axios.post(`${API_BASE}/sendDocument`, form, {
+                headers: form.getHeaders(),
+                timeout: 30000,
+            });
+            return true;
+        } catch (error: any) {
+            console.error(`❌ Telegram 문서 발송 실패 (chatId=${chatId}):`, error?.response?.data || error.message);
+            return false;
+        }
+    }
+
+    /** 모니터링 완료 알림 발송 (PDF 보고서 첨부) */
     async sendMonitoringAlert(
         clientId: number,
         templateName: string,
@@ -39,6 +62,7 @@ class TelegramService {
         resultId: number,
         templateId: number,
         sentiment?: { positive: number; neutral: number; negative: number } | null,
+        pdfBuffer?: Buffer | null,
     ): Promise<void> {
         try {
             // 거래처 Telegram 연동 확인
@@ -55,23 +79,37 @@ class TelegramService {
                 `😟 부정 ${sentiment.negative}건`,
             ] : [];
 
-            const message = [
-                `🏥 *${this.escapeMarkdown(templateName)}*`,
-                `📊 수집 ${postsCount}건 | ${now}`,
-                ``,
-                ...sentimentLines,
-                sentimentLines.length ? `` : null,
-                `📋 [보고서 확인](${process.env.APP_URL || "http://localhost:5173"}/monitoring)`,
-            ].filter(v => v !== null).join("\n");
+            let success = false;
 
-            const success = await this.sendMessage(client.telegramChatId, message);
+            if (pdfBuffer) {
+                // PDF 첨부 발송 (HTML caption)
+                const caption = [
+                    `🏥 <b>${this.escapeHtml(templateName)}</b>`,
+                    `📊 수집 ${postsCount}건 | ${now}`,
+                    ``,
+                    ...sentimentLines,
+                ].filter(v => v !== null).join("\n");
+
+                const fileName = `모니터링_보고서_${templateName}_${new Date().toISOString().split("T")[0]}.pdf`;
+                success = await this.sendDocument(client.telegramChatId, pdfBuffer, fileName, caption);
+            } else {
+                // PDF 없으면 기존 텍스트 메시지 발송
+                const message = [
+                    `🏥 *${this.escapeMarkdown(templateName)}*`,
+                    `📊 수집 ${postsCount}건 | ${now}`,
+                    ``,
+                    ...sentimentLines,
+                ].filter(v => v !== null).join("\n");
+
+                success = await this.sendMessage(client.telegramChatId, message);
+            }
 
             // 알림 이력 저장
             await db.insert(notificationLogs).values({
                 clientId,
                 channel: "telegram",
                 messageType: "monitoring",
-                content: message,
+                content: pdfBuffer ? `[PDF 보고서 첨부] ${templateName}` : `텍스트 알림: ${templateName}`,
                 status: success ? "sent" : "failed",
                 errorMessage: success ? null : "메시지 발송 실패",
                 templateId,
@@ -79,11 +117,16 @@ class TelegramService {
             });
 
             if (success) {
-                console.log(`✅ Telegram 알림 발송 완료: ${client.name}`);
+                console.log(`✅ Telegram 알림 발송 완료: ${client.name}${pdfBuffer ? ' (PDF 첨부)' : ''}`);
             }
         } catch (error: any) {
             console.error(`❌ Telegram 알림 처리 오류:`, error.message);
         }
+    }
+
+    /** HTML 특수문자 이스케이프 (caption용) */
+    private escapeHtml(text: string): string {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
     /** Webhook으로 수신된 메시지 처리 (/start 명령 → chat_id 저장) */

@@ -83,6 +83,7 @@ const MonitoringPage = () => {
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
   const [reportHtml, setReportHtml] = useState<string | null>(null);
+  const [reportResultId, setReportResultId] = useState<number | null>(null);
   const [executing, setExecuting] = useState<Set<number>>(new Set());
   const [selectedResultIds, setSelectedResultIds] = useState<Set<number>>(
     new Set(),
@@ -239,6 +240,29 @@ const MonitoringPage = () => {
     }
   };
 
+  const downloadPdf = async (resultId: number) => {
+    try {
+      toast.loading("PDF 생성 중...", { id: "pdf-loading" });
+      const res = await fetch(`${API}/results/${resultId}/pdf`, {
+        headers: getAuthOnly(),
+      });
+      if (!res.ok) {
+        toast.error("PDF 생성 실패", { id: "pdf-loading" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `monitoring_report_${resultId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF 다운로드 완료", { id: "pdf-loading" });
+    } catch {
+      toast.error("PDF 다운로드 실패", { id: "pdf-loading" });
+    }
+  };
+
   // ★ 수정: 앱 내부 모달로 HTML 보고서 표시
   const deleteResults = async () => {
     if (selectedResultIds.size === 0)
@@ -288,6 +312,7 @@ const MonitoringPage = () => {
       }
       const html = await res.text();
       setReportHtml(html);
+      setReportResultId(resultId);
     } catch {
       toast.error("보고서 보기 실패");
     }
@@ -875,6 +900,12 @@ const MonitoringPage = () => {
                   <FileDown size={14} /> 엑셀
                 </button>
                 <button
+                  onClick={() => downloadPdf(selectedResult.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700"
+                >
+                  <FileDown size={14} /> PDF
+                </button>
+                <button
                   onClick={() => viewReport(selectedResult.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700"
                 >
@@ -1017,6 +1048,12 @@ const MonitoringPage = () => {
             <div className="flex items-center justify-between px-6 py-3 border-b">
               <h2 className="font-bold text-gray-900">📊 HTML 보고서</h2>
               <div className="flex gap-2">
+                <button
+                  onClick={() => reportResultId && downloadPdf(reportResultId)}
+                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 flex items-center gap-1.5"
+                >
+                  <FileDown size={14} /> PDF 다운로드
+                </button>
                 <button
                   onClick={() => {
                     const blob = new Blob([reportHtml], { type: "text/html" });
