@@ -230,7 +230,7 @@ router.put("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res)
             totalAmount: totalAmount !== undefined ? totalAmount : existing.totalAmount,
             monthlyAmount: monthlyAmount !== undefined ? monthlyAmount : existing.monthlyAmount,
             notes: notes !== undefined ? notes : existing.notes,
-            validUntil: validUntil !== undefined ? validUntil : existing.validUntil,
+            validUntil: validUntil !== undefined ? (validUntil || null) : existing.validUntil,
             updatedAt: new Date(),
         }).where(eq(quotations.id, id));
 

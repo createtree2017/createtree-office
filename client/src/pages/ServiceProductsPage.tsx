@@ -116,7 +116,7 @@ const ServiceProductsPage: React.FC = () => {
     };
 
     const handleDelete = async (svc: Service) => {
-        if (!confirm(`"${svc.name}" 서비스를 비활성화하시겠습니까?`)) return;
+        if (!confirm(`"${svc.name}" 서비스를 삭제하시겠습니까?\n\n⚠️ 하위 등급, 비용 항목이 모두 삭제됩니다.`)) return;
         try {
             const res = await fetch(`${API}/${svc.id}`, { method: 'DELETE', headers: getHeaders() });
             const data = await res.json();

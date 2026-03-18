@@ -351,7 +351,7 @@ router.put("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res)
 
 // ────────────────────────────────────────────
 // DELETE /api/services/:id
-// 서비스 비활성화 (soft delete)
+// 서비스 완전 삭제 (하위 tiers, items는 cascade 삭제)
 // ────────────────────────────────────────────
 router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
     try {
@@ -361,12 +361,9 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
         const [existing] = await db.select().from(services).where(eq(services.id, id));
         if (!existing) return res.status(404).json({ success: false, message: "서비스를 찾을 수 없습니다." });
 
-        await db.update(services).set({
-            isActive: false,
-            updatedAt: new Date(),
-        }).where(eq(services.id, id));
+        await db.delete(services).where(eq(services.id, id));
 
-        res.json({ success: true, message: `"${existing.name}" 서비스가 비활성화되었습니다.` });
+        res.json({ success: true, message: `"${existing.name}" 서비스가 삭제되었습니다.` });
     } catch (error: any) {
         console.error("서비스 삭제 오류:", error);
         res.status(500).json({ success: false, message: "서비스 삭제 중 오류가 발생했습니다." });

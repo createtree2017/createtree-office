@@ -358,9 +358,13 @@ class TelegramService {
 
 export const telegramService = new TelegramService();
 
-// 서버 시작 시 자동으로 Polling 시작
-setTimeout(() => {
-    telegramService.startPolling().catch(err => {
-        console.error("⚠️ Telegram Polling 시작 실패:", err.message);
-    });
-}, 2000);
+// 서버 시작 시 자동으로 Polling 시작 (프로덕션 환경에서만)
+if (process.env.NODE_ENV === "production") {
+    setTimeout(() => {
+        telegramService.startPolling().catch(err => {
+            console.error("⚠️ Telegram Polling 시작 실패:", err.message);
+        });
+    }, 2000);
+} else {
+    console.log("⚠️ 로컬 개발 환경 — Telegram Polling 비활성화 (프로덕션과 충돌 방지)");
+}
