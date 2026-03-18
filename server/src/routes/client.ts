@@ -3,7 +3,7 @@ import { db } from "../db/index.js";
 import { clients, users, tasks } from "../db/schema.js";
 import { authenticateToken, authorizeRole } from "../middleware/auth.js";
 import { google } from "googleapis";
-import { eq, isNull, isNotNull } from "drizzle-orm";
+import { eq, isNull, isNotNull, asc } from "drizzle-orm";
 import multer from "multer";
 
 const router = Router();
@@ -70,7 +70,8 @@ router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (r
     try {
         const isTerminated = req.query.terminated === 'true';
         const allClients = await db.select().from(clients)
-            .where(isTerminated ? isNotNull(clients.contractEndedAt) : isNull(clients.contractEndedAt));
+            .where(isTerminated ? isNotNull(clients.contractEndedAt) : isNull(clients.contractEndedAt))
+            .orderBy(asc(clients.sortOrder));
         res.json({ success: true, data: allClients });
     } catch (error: any) {
         console.error("Client fetch error:", error);
@@ -80,11 +81,11 @@ router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (r
 
 // ────────────────────────────────────────────
 // POST /api/clients
-// 새 거래처 생성 + 구글 드라이브 폴더 자동 생성 + 계약서 업로드
+// 새 거래처 생성 + 구글 드라이브 폴더 자동 생성
 // ────────────────────────────────────────────
-router.post("/", authenticateToken, authorizeRole(["ADMIN"]), upload.single('contractFile'), async (req, res) => {
+router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
     try {
-        const { name, contractStartDate, contractEndDate } = req.body;
+        const { name } = req.body;
         if (!name) return res.status(400).json({ success: false, message: "거래처명이 필요합니다." });
 
         const drive = getDrive();
@@ -98,42 +99,15 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), upload.single('con
         const driveFolderId = driveResponse.data.id;
         if (!driveFolderId) throw new Error("드라이브 폴더 ID를 받지 못했습니다.");
 
-        // 2. 계약서 파일 업로드 (첨부된 경우)
-        let contractFileDriveId: string | null = null;
-        let contractFileName: string | null = null;
-        const uploadedFile = (req as any).file;
-        if (uploadedFile) {
-            try {
-                const { Readable } = await import('stream');
-                const fileStream = Readable.from(uploadedFile.buffer);
-                const fileResponse = await drive.files.create({
-                    requestBody: {
-                        name: uploadedFile.originalname,
-                        parents: [driveFolderId],
-                    },
-                    media: {
-                        mimeType: uploadedFile.mimetype,
-                        body: fileStream,
-                    },
-                    fields: 'id',
-                    supportsAllDrives: true,
-                });
-                contractFileDriveId = fileResponse.data.id || null;
-                contractFileName = uploadedFile.originalname;
-                console.log(`📎 계약서 업로드 완료: "${contractFileName}" (${contractFileDriveId})`);
-            } catch (fileErr: any) {
-                console.error("계약서 파일 업로드 실패:", fileErr.message);
-            }
-        }
+        // 2. 현재 최대 sortOrder 조회 후 마지막에 추가
+        const existing = await db.select({ so: clients.sortOrder }).from(clients).orderBy(asc(clients.sortOrder));
+        const maxOrder = existing.length > 0 ? Math.max(...existing.map(e => e.so)) : 0;
 
         // 3. DB 저장
         const [newClient] = await db.insert(clients).values({
             name,
             driveFolderId,
-            contractStartDate: contractStartDate || null,
-            contractEndDate: contractEndDate || null,
-            contractFileDriveId,
-            contractFileName,
+            sortOrder: maxOrder + 1,
         }).returning();
         res.json({ success: true, data: newClient });
     } catch (error: any) {
@@ -142,12 +116,34 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), upload.single('con
     }
 });
 
+// ────────────────────────────────────────────
+// PUT /api/clients/reorder
+// 병원 카드 순서 변경 (드래그 정렬)
+// ────────────────────────────────────────────
+router.put("/reorder", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
+    try {
+        const { orderedIds } = req.body; // [clientId1, clientId2, ...] 순서대로
+        if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+            return res.status(400).json({ success: false, message: "정렬 순서 데이터가 필요합니다." });
+        }
+        for (let i = 0; i < orderedIds.length; i++) {
+            await db.update(clients)
+                .set({ sortOrder: i, updatedAt: new Date() })
+                .where(eq(clients.id, orderedIds[i]));
+        }
+        res.json({ success: true, message: `${orderedIds.length}개 거래처 순서가 변경되었습니다.` });
+    } catch (error: any) {
+        console.error("Client reorder error:", error);
+        res.status(500).json({ success: false, message: "순서 변경 중 오류가 발생했습니다." });
+    }
+});
+
 
 // ────────────────────────────────────────────
 // PATCH /api/clients/:id
 // 거래처명 + 계약기간 + 계약서 파일 수정
 // ────────────────────────────────────────────
-router.patch("/:id", authenticateToken, authorizeRole(["ADMIN"]), upload.single('contractFile'), async (req, res) => {
+router.patch("/:id", authenticateToken, authorizeRole(["ADMIN"]), upload.single('businessRegFile'), async (req, res) => {
     try {
         const clientId = parseInt(req.params.id);
         const { name, contractStartDate, contractEndDate } = req.body;
@@ -156,9 +152,9 @@ router.patch("/:id", authenticateToken, authorizeRole(["ADMIN"]), upload.single(
         const [existingClient] = await db.select().from(clients).where(eq(clients.id, clientId));
         if (!existingClient) return res.status(404).json({ success: false, message: "거래처를 찾을 수 없습니다." });
 
-        // 계약서 파일 처리 (업로드된 경우에만)
-        let contractFileDriveId = existingClient.contractFileDriveId;
-        let contractFileName = existingClient.contractFileName;
+        // 사업자등록증 파일 처리 (업로드된 경우에만)
+        let businessRegDriveId = existingClient.businessRegDriveId;
+        let businessRegFileName = existingClient.businessRegFileName;
         const uploadedFile = (req as any).file;
         if (uploadedFile && existingClient.driveFolderId) {
             try {
@@ -171,11 +167,11 @@ router.patch("/:id", authenticateToken, authorizeRole(["ADMIN"]), upload.single(
                     fields: 'id',
                     supportsAllDrives: true,
                 });
-                contractFileDriveId = fileResponse.data.id || null;
-                contractFileName = uploadedFile.originalname;
-                console.log(`📎 계약서 업데이트: "${contractFileName}"`);
+                businessRegDriveId = fileResponse.data.id || null;
+                businessRegFileName = uploadedFile.originalname;
+                console.log(`📎 사업자등록증 업데이트: "${businessRegFileName}"`);
             } catch (fileErr: any) {
-                console.error("계약서 업로드 실패:", fileErr.message);
+                console.error("사업자등록증 업로드 실패:", fileErr.message);
             }
         }
 
@@ -194,7 +190,7 @@ router.patch("/:id", authenticateToken, authorizeRole(["ADMIN"]), upload.single(
             }
         }
 
-        const updateData: any = { updatedAt: new Date(), contractFileDriveId, contractFileName };
+        const updateData: any = { updatedAt: new Date(), businessRegDriveId, businessRegFileName };
         if (name) updateData.name = name;
         if (contractStartDate !== undefined) updateData.contractStartDate = contractStartDate || null;
         if (contractEndDate !== undefined) updateData.contractEndDate = contractEndDate || null;

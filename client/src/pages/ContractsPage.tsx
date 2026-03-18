@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { FileText, ArrowLeft, Calendar, Building2, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useNavigate } from 'react-router-dom';
+import SubNav from '../components/SubNav';
 
 type ContractStatus = 'draft' | 'signed' | 'active' | 'expired' | 'terminated';
 interface Contract { id: number; contractNumber: string; quotationId?: number | null; clientId: number; clientName?: string; title: string; contractMonths: number; startDate?: string; endDate?: string; subtotal: number; discountAmount: number; totalAmount: number; monthlyAmount: number; notes?: string; commonTerms?: string; specialTerms?: string; status: ContractStatus; signedAt?: string; createdBy?: number | null; createdByName?: string; createdAt: string; updatedAt: string; quotationNumber?: string; }
@@ -327,17 +328,7 @@ const ContractsPage: React.FC = () => {
     return (
         <div className="pt-14 min-h-screen bg-[hsl(var(--background))]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <FileText size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">계약 관리</h1>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">견적서 기반 계약서를 관리합니다.</p>
-                        </div>
-                    </div>
-                </div>
+                <SubNav group="client" />
 
                 {loading ? (
                     <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">불러오는 중...</div>
