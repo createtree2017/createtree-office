@@ -15,6 +15,9 @@ export const clients = pgTable("clients", {
     contractEndDate: date("contract_end_date"),            // 계약만료일
     contractFileDriveId: text("contract_file_drive_id"),  // 계약서 Drive 파일 ID
     contractFileName: text("contract_file_name"),          // 계약서 원본 파일명
+    businessRegDriveId: text("business_reg_drive_id"),    // 사업자등록증 Drive 파일 ID
+    businessRegFileName: text("business_reg_file_name"),   // 사업자등록증 원본 파일명
+    sortOrder: integer("sort_order").default(0).notNull(), // 수동 정렬 순서
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

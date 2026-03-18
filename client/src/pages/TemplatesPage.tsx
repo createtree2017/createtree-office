@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Play, Pencil, RefreshCw, Square, LayoutTemplate } from 'lucide-react';
 import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
+import SubNav from '../components/SubNav';
 
 // ===== 업무 템플릿 타입 =====
 type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'file' | 'date' | 'date_range';
@@ -397,30 +398,25 @@ const TemplatesPage: React.FC = () => {
     return (
         <div className="pt-14 min-h-screen bg-[hsl(var(--background))]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-                {/* 헤더 */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <LayoutTemplate size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">템플릿 관리</h1>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">업무 양식 및 모니터링 템플릿을 관리합니다.</p>
-                        </div>
-                    </div>
-                    {activeTab === 'task' && (
-                        <button onClick={handleCreateNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors shadow-md">
-                            <Plus size={16} /> 템플릿 쓰기
-                        </button>
-                    )}
-                    {activeTab === 'monitoring' && (
-                        <button onClick={() => setShowMonCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm font-semibold transition-colors shadow-md">
-                            <Plus size={16} /> 새 모니터링 템플릿
-                        </button>
-                    )}
-                </div>
+                <SubNav
+                    group="product"
+                    rightSlot={
+                        <>
+                            {activeTab === 'task' && (
+                                <button onClick={handleCreateNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors shadow-md">
+                                    <Plus size={16} /> 템플릿 쓰기
+                                </button>
+                            )}
+                            {activeTab === 'monitoring' && (
+                                <button onClick={() => setShowMonCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm font-semibold transition-colors shadow-md">
+                                    <Plus size={16} /> 새 모니터링 템플릿
+                                </button>
+                            )}
+                        </>
+                    }
+                />
 
-                {/* 탭 */}
+                {/* 내부 탭 (업무/모니터링) */}
                 <div className="flex gap-1 mb-6 bg-[hsl(var(--card))] p-1 rounded-xl border border-[hsl(var(--border))] w-fit">
                     {[
                         { key: 'task', label: '업무 템플릿', icon: FileText },

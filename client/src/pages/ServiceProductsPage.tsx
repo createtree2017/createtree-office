@@ -4,6 +4,7 @@ import {
     Package, Plus, Save, ArrowLeft, Trash2, MoveUp, MoveDown,
     GripVertical, ChevronDown, ChevronUp, Eye, EyeOff, Pencil, Settings2
 } from 'lucide-react';
+import SubNav from '../components/SubNav';
 
 // ===== 타입 정의 =====
 type BillingType = 'monthly' | 'per_event' | 'one_time' | 'quote_based';
@@ -364,28 +365,21 @@ const ServiceProductsPage: React.FC = () => {
     return (
         <div className="pt-14 min-h-screen bg-[hsl(var(--background))]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-                {/* 헤더 */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <Package size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">서비스 상품 관리</h1>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">창조트리기획 서비스 상품 및 가격 체계를 관리합니다.</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => setShowPolicies(!showPolicies)} className="flex items-center gap-1.5 px-3 py-2 border border-[hsl(var(--border))] rounded-lg text-sm font-semibold hover:bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]">
-                            <Settings2 size={14} /> 할인 정책
-                        </button>
-                        {user?.role === 'ADMIN' && (
-                            <button onClick={handleNew} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-semibold shadow-md">
-                                <Plus size={16} /> 서비스 등록
+                <SubNav
+                    group="product"
+                    rightSlot={
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowPolicies(!showPolicies)} className="flex items-center gap-1.5 px-3 py-2 border border-[hsl(var(--border))] rounded-lg text-sm font-semibold hover:bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]">
+                                <Settings2 size={14} /> 할인 정책
                             </button>
-                        )}
-                    </div>
-                </div>
+                            {user?.role === 'ADMIN' && (
+                                <button onClick={handleNew} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-semibold shadow-md">
+                                    <Plus size={16} /> 서비스 등록
+                                </button>
+                            )}
+                        </div>
+                    }
+                />
 
                 {/* 할인 정책 패널 */}
                 {showPolicies && (

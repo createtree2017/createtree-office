@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Book, CheckSquare, Settings, LogOut, User, ChevronDown, Shield, Sun, Moon, FolderOpen, LayoutTemplate, Activity, Package, FileText } from 'lucide-react';
+import { Home, Book, CheckSquare, LogOut, User, ChevronDown, Sun, Moon, FolderOpen, Activity, Briefcase, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // 다크모드 훅
@@ -24,20 +24,22 @@ const useDarkMode = () => {
     return { isDark, toggle: () => setIsDark(prev => !prev) };
 };
 
+// ────────────────────────────────────────────
+// NavBar 메인
+// ────────────────────────────────────────────
 const NavBar = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [profileOpen, setProfileOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    const profileRef = useRef<HTMLDivElement>(null);
     const { isDark, toggle } = useDarkMode();
 
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
 
-    // 드롭다운 외부 클릭 시 닫기
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+            if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
                 setProfileOpen(false);
             }
         };
@@ -52,31 +54,30 @@ const NavBar = () => {
         navigate('/login');
     };
 
-    const navItems = [
-        // 홈/매뉴얼/업무/자료실 — ADMIN, MANAGER 전용
+    // ── 일반 메뉴 ──
+    const basicItems = [
         ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
             { path: '/', label: '홈', icon: Home },
             { path: '/manuals', label: '매뉴얼', icon: Book },
             { path: '/tasks', label: '업무', icon: CheckSquare },
-            { path: '/drive', label: '자료실', icon: FolderOpen },
         ] : []),
-
         ...(user && ['ADMIN', 'MANAGER', 'HOSPITAL_ADMIN'].includes(user.role) ? [
             { path: '/monitoring', label: '모니터링', icon: Activity },
         ] : []),
-
-        ...(user && ['ADMIN', 'MANAGER'].includes(user.role) ? [
-            { path: '/templates', label: '템플릿 관리', icon: LayoutTemplate },
-            { path: '/services', label: '서비스 상품', icon: Package },
-            { path: '/quotations', label: '견적 관리', icon: FileText },
-            { path: '/contracts', label: '계약 관리', icon: FileText },
-        ] : []),
-
-        ...(user?.role === 'ADMIN' ? [
-            { path: '/admin', label: '관리자', icon: Shield },
-            { onClick: () => window.open('https://drive.google.com/drive/my-drive', '_blank'), label: '관리자 드라이브', icon: FolderOpen, isButton: true, className: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm" }
-        ] : []),
     ];
+
+    // ── 관리 메뉴 (원버튼 직행) ──
+    const managementItems = [
+        { path: '/admin?tab=users', label: '거래처 관리', icon: Briefcase, matchPaths: ['/admin', '/quotations', '/contracts'] },
+        { path: '/templates', label: '상품 관리', icon: Package, matchPaths: ['/templates', '/services'] },
+    ];
+
+    const isAdminOrManager = user && ['ADMIN', 'MANAGER'].includes(user.role);
+
+    // 활성 상태 판단
+    const isManagementActive = (item: typeof managementItems[0]) => {
+        return item.matchPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
+    };
 
     const getRoleBadge = (role: string) => {
         switch (role) {
@@ -91,56 +92,75 @@ const NavBar = () => {
     return (
         <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-white dark:bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] flex items-center px-6 gap-2 shadow-sm dark:shadow-black/20">
             {/* 로고 */}
-            <button
-                onClick={() => navigate('/')}
-                className="flex items-center gap-2 mr-4 group"
-            >
-                <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-md group-hover:scale-105 transition-transform">
-                    CT
-                </div>
+            <button onClick={() => navigate('/')} className="flex items-center gap-2 mr-4 group">
+                <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-md group-hover:scale-105 transition-transform">CT</div>
                 <span className="font-extrabold text-slate-900 dark:text-slate-100 tracking-tight text-sm hidden sm:block">
                     createTree <span className="text-blue-500">Office</span>
                 </span>
             </button>
 
-            {/* 네비게이션 링크 */}
+            {/* 네비게이션 */}
             <div className="flex items-center gap-1">
-                {navItems.map((item, index) => {
-                    const { path, label, icon: Icon, isButton, onClick, className } = item as any;
-                    const isActive = path ? (location.pathname === path || (path !== '/' && location.pathname.startsWith(path))) : false;
-
-                    if (isButton) {
-                        return (
-                            <button
-                                key={`btn-${index}`}
-                                onClick={onClick}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${className || ''}`}
-                            >
-                                <Icon size={14} />
-                                <span className="hidden sm:block">{label}</span>
-                            </button>
-                        );
-                    }
-
+                {basicItems.map(item => {
+                    const Icon = item.icon;
+                    const isActive = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
                     return (
                         <button
-                            key={path}
-                            onClick={() => navigate(path)}
+                            key={item.path}
+                            onClick={() => navigate(item.path)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${isActive
                                 ? 'bg-blue-600 text-white shadow-sm shadow-blue-200 dark:shadow-blue-900/50'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                                }`}
+                            }`}
                         >
                             <Icon size={14} />
-                            <span className="hidden sm:block">{label}</span>
+                            <span className="hidden sm:block">{item.label}</span>
                         </button>
                     );
                 })}
+
             </div>
 
-            {/* 오른쪽 영역: 다크모드 토글 + 프로필 */}
+            {/* 오른쪽 영역 */}
             <div className="ml-auto flex items-center gap-2">
-                {/* 다크모드 토글 버튼 */}
+                {isAdminOrManager && (
+                    <>
+                        {managementItems.map(item => {
+                            const Icon = item.icon;
+                            const isActive = isManagementActive(item);
+                            return (
+                                <button
+                                    key={item.label}
+                                    onClick={() => navigate(item.path)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${isActive
+                                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200 dark:shadow-emerald-900/50'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                                    }`}
+                                >
+                                    <Icon size={14} />
+                                    <span className="hidden sm:block">{item.label}</span>
+                                </button>
+                            );
+                        })}
+                    </>
+                )}
+
+                {isAdminOrManager && (() => {
+                    const isDriveActive = location.pathname.startsWith('/drive');
+                    return (
+                        <button
+                            onClick={() => navigate('/drive')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${isDriveActive
+                                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200 dark:shadow-emerald-900/50'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                            }`}
+                        >
+                            <FolderOpen size={14} />
+                            <span className="hidden sm:block">자료실</span>
+                        </button>
+                    );
+                })()}
+
                 <button
                     onClick={toggle}
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700/60 hover:text-slate-700 dark:hover:text-slate-300 transition-all"
@@ -149,8 +169,7 @@ const NavBar = () => {
                     {isDark ? <Sun size={16} /> : <Moon size={16} />}
                 </button>
 
-                {/* 프로필 드롭다운 */}
-                <div className="relative" ref={dropdownRef}>
+                <div className="relative" ref={profileRef}>
                     <button
                         onClick={() => setProfileOpen(prev => !prev)}
                         className="flex items-center gap-2 pl-3 pr-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all border border-transparent hover:border-[hsl(var(--border))] group"
@@ -169,10 +188,8 @@ const NavBar = () => {
                         <ChevronDown size={14} className={`text-slate-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
                     </button>
 
-                    {/* 드롭다운 메뉴 */}
                     {profileOpen && (
                         <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-xl dark:shadow-black/40 border border-[hsl(var(--border))] py-2 overflow-hidden">
-                            {/* 유저 정보 */}
                             <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold">
@@ -184,7 +201,6 @@ const NavBar = () => {
                                     </div>
                                 </div>
                             </div>
-
                             <div className="py-1">
                                 <button
                                     onClick={() => { navigate('/mypage'); setProfileOpen(false); }}
@@ -193,17 +209,7 @@ const NavBar = () => {
                                     <User size={15} />
                                     마이페이지
                                 </button>
-                                {user?.role === 'ADMIN' && (
-                                    <button
-                                        onClick={() => { navigate('/admin'); setProfileOpen(false); }}
-                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
-                                    >
-                                        <Settings size={15} />
-                                        관리자 설정
-                                    </button>
-                                )}
                             </div>
-
                             <div className="border-t border-[hsl(var(--border))] py-1">
                                 <button
                                     onClick={() => { handleLogout(); setProfileOpen(false); }}

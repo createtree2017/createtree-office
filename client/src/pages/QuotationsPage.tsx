@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Save, ArrowLeft, Trash2, ChevronRight, ChevronLeft, Check, Search, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
+import SubNav from '../components/SubNav';
 
 // ===== 타입 =====
 type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
@@ -530,22 +531,16 @@ const QuotationsPage: React.FC = () => {
     return (
         <div className="pt-14 min-h-screen bg-[hsl(var(--background))]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <FileText size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-[hsl(var(--foreground))]">견적 관리</h1>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))]">거래처별 서비스 견적서를 생성하고 관리합니다.</p>
-                        </div>
-                    </div>
-                    {user?.role === 'ADMIN' && (
-                        <button onClick={handleNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-md">
-                            <Plus size={16} /> 견적서 작성
-                        </button>
-                    )}
-                </div>
+                <SubNav
+                    group="client"
+                    rightSlot={
+                        user?.role === 'ADMIN' ? (
+                            <button onClick={handleNew} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-md">
+                                <Plus size={16} /> 견적서 작성
+                            </button>
+                        ) : undefined
+                    }
+                />
 
                 {loading ? (
                     <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">불러오는 중...</div>
