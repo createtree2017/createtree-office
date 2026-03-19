@@ -15,7 +15,8 @@ interface ServiceItemPrice { id?: number; itemId?: number; tierId: number | null
 interface ServiceItem { id?: number; tempId?: string; serviceId?: number; name: string; description?: string; category: ItemCategory; isRequired: boolean; priceUnit: PriceUnit; unitLabel?: string; sortOrder: number; prices: ServiceItemPrice[]; }
 interface ServiceTier { id?: number; tempId?: string; serviceId?: number; name: string; description?: string; minQuantity?: number; maxQuantity?: number; sortOrder: number; isDefault: boolean; }
 interface Service { id: number; name: string; slug: string; description?: string; billingType: BillingType; isActive: boolean; sortOrder: number; metadata?: any; linkedTaskTemplateId?: number; createdAt: string; updatedAt: string; tiers: ServiceTier[]; items: ServiceItem[]; }
-interface DiscountPolicy { id?: number; name: string; minMonths: number; discountRate: number; isActive: boolean; }
+type DiscountType = 'percentage' | 'fixed_amount';
+interface DiscountPolicy { id?: number; name: string; minMonths: number; discountType: DiscountType; discountRate: number; isActive: boolean; }
 
 const API = '/api/services';
 const getHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -387,7 +388,7 @@ const ServiceProductsPage: React.FC = () => {
                         <h3 className="font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><Settings2 size={16} /> 계약 기간별 할인 정책</h3>
                         <div className="space-y-2">
                             {policies.map((p, idx) => (
-                                <div key={idx} className="flex items-center gap-3">
+                                <div key={idx} className="flex items-center gap-3 flex-wrap">
                                     <input value={p.name} onChange={e => setPolicies(policies.map((pp, i) => i === idx ? { ...pp, name: e.target.value } : pp))} className="p-2 border border-[hsl(var(--border))] rounded bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm" placeholder="정책명" />
                                     <div className="flex items-center gap-1">
                                         <input type="number" value={p.minMonths} onChange={e => setPolicies(policies.map((pp, i) => i === idx ? { ...pp, minMonths: parseInt(e.target.value) || 0 } : pp))} className="w-16 p-2 border border-[hsl(var(--border))] rounded bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm text-right" />
@@ -395,7 +396,10 @@ const ServiceProductsPage: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <input type="number" value={p.discountRate} onChange={e => setPolicies(policies.map((pp, i) => i === idx ? { ...pp, discountRate: parseInt(e.target.value) || 0 } : pp))} className="w-16 p-2 border border-[hsl(var(--border))] rounded bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm text-right" />
-                                        <span className="text-xs text-[hsl(var(--muted-foreground))]">% 할인</span>
+                                        <select value={p.discountType || 'percentage'} onChange={e => setPolicies(policies.map((pp, i) => i === idx ? { ...pp, discountType: e.target.value as DiscountType } : pp))} className="p-2 border border-[hsl(var(--border))] rounded bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm">
+                                            <option value="percentage">% 할인</option>
+                                            <option value="fixed_amount">만원 할인</option>
+                                        </select>
                                     </div>
                                     <label className="flex items-center gap-1"><input type="checkbox" checked={p.isActive} onChange={e => setPolicies(policies.map((pp, i) => i === idx ? { ...pp, isActive: e.target.checked } : pp))} className="rounded" /><span className="text-xs">활성</span></label>
                                     <button onClick={() => setPolicies(policies.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
@@ -403,7 +407,7 @@ const ServiceProductsPage: React.FC = () => {
                             ))}
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setPolicies([...policies, { name: '', minMonths: 6, discountRate: 5, isActive: true }])} className="text-sm text-blue-600 hover:underline">+ 정책 추가</button>
+                            <button onClick={() => setPolicies([...policies, { name: '', minMonths: 6, discountType: 'percentage', discountRate: 5, isActive: true }])} className="text-sm text-blue-600 hover:underline">+ 정책 추가</button>
                             <button onClick={savePolicies} className="ml-auto px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">저장</button>
                         </div>
                     </div>

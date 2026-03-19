@@ -4,6 +4,7 @@ import { FileText, ArrowLeft, Calendar, Building2, Download } from 'lucide-react
 import html2pdf from 'html2pdf.js';
 import { useNavigate } from 'react-router-dom';
 import SubNav from '../components/SubNav';
+import ClientFilter from '../components/ClientFilter';
 
 type ContractStatus = 'draft' | 'signed' | 'active' | 'expired' | 'terminated';
 interface Contract { id: number; contractNumber: string; quotationId?: number | null; clientId: number; clientName?: string; title: string; contractMonths: number; startDate?: string; endDate?: string; subtotal: number; discountAmount: number; totalAmount: number; monthlyAmount: number; notes?: string; commonTerms?: string; specialTerms?: string; status: ContractStatus; signedAt?: string; createdBy?: number | null; createdByName?: string; createdAt: string; updatedAt: string; quotationNumber?: string; }
@@ -27,13 +28,19 @@ const ContractsPage: React.FC = () => {
     const [editForm, setEditForm] = useState({ title: '', startDate: '', endDate: '', notes: '', commonTerms: '', specialTerms: '' });
     const [renewMode, setRenewMode] = useState(false);
     const [renewForm, setRenewForm] = useState({ contractMonths: 6, startDate: '', endDate: '', title: '', notes: '', commonTerms: '', specialTerms: '' });
+    const [clients, setClients] = useState<{ id: number; name: string }[]>([]);
+    const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch(API, { headers: hdrs() });
-            const data = await res.json();
-            if (data.success) setContracts(data.data);
+            const [ctRes, clRes] = await Promise.all([
+                fetch(API, { headers: hdrs() }),
+                fetch('/api/clients', { headers: hdrs() }),
+            ]);
+            const [ctData, clData] = await Promise.all([ctRes.json(), clRes.json()]);
+            if (ctData.success) setContracts(ctData.data);
+            if (clData.success) setClients(clData.data);
         } catch { toast.error('데이터 로드 실패'); }
         setLoading(false);
     }, []);
@@ -330,6 +337,12 @@ const ContractsPage: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
                 <SubNav group="client" />
 
+                <ClientFilter
+                    clients={clients}
+                    selectedId={filterClientId}
+                    onSelect={setFilterClientId}
+                />
+
                 {loading ? (
                     <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">불러오는 중...</div>
                 ) : contracts.length === 0 ? (
@@ -352,7 +365,9 @@ const ContractsPage: React.FC = () => {
                                 <th className="p-3 text-center font-semibold">작성일</th>
                             </tr></thead>
                             <tbody>
-                                {contracts.map(ct => (
+                                {contracts
+                                    .filter(ct => filterClientId === 'all' || ct.clientId === filterClientId)
+                                    .map(ct => (
                                     <tr key={ct.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--accent))] cursor-pointer" onClick={() => handleDetail(ct.id)}>
                                         <td className="p-3 font-mono text-xs">{ct.contractNumber}</td>
                                         <td className="p-3 font-medium">{ct.clientName}</td>

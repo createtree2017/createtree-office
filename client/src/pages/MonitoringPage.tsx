@@ -19,6 +19,7 @@ import {
   Square,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import ClientFilter from '../components/ClientFilter';
 
 const API = "/api/monitoring";
 const getHeaders = () => ({
@@ -88,8 +89,8 @@ const MonitoringPage = () => {
   const [selectedResultIds, setSelectedResultIds] = useState<Set<number>>(
     new Set(),
   );
-  const [clientFilter, setClientFilter] = useState<number | null>(null);
-  const [resultClientFilter, setResultClientFilter] = useState<number | null>(null);
+  const [clientFilter, setClientFilter] = useState<number | 'all' | 'unassigned'>('all');
+  const [resultClientFilter, setResultClientFilter] = useState<number | 'all' | 'unassigned'>('all');
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -558,37 +559,18 @@ const MonitoringPage = () => {
           const uniqueClients = Array.from(
             new Map(templates.map(t => [t.clientId, (t as any).clientName || clients.find(c => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
           ).map(([id, name]) => ({ id, name }));
-          const filteredTemplates = clientFilter === null ? templates : templates.filter(t => t.clientId === clientFilter);
+          const filteredTemplates = clientFilter === 'all' ? templates : templates.filter(t => t.clientId === clientFilter);
 
           return (
           <div className="space-y-3">
-            {/* 거래처 필터 바 */}
-            {uniqueClients.length > 1 && (
-              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                <button
-                  onClick={() => setClientFilter(null)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                    clientFilter === null
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                      : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
-                  }`}
-                >
-                  전체
-                </button>
-                {uniqueClients.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setClientFilter(c.id)}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                      clientFilter === c.id
-                        ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                        : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
+            {/* 거래처 필터 바 — ClientFilter 공통 컴포넌트 */}
+            {uniqueClients.length > 0 && (
+              <ClientFilter
+                clients={uniqueClients}
+                selectedId={clientFilter}
+                onSelect={setClientFilter}
+                variant="violet"
+              />
             )}
 
             {filteredTemplates.length === 0 && (
@@ -598,7 +580,7 @@ const MonitoringPage = () => {
                   className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]"
                 />
                 <p className="text-[hsl(var(--muted-foreground))]">
-                  {clientFilter !== null ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
+                {clientFilter !== 'all' ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
                 </p>
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
                   관리자에게 템플릿 생성을 요청하세요. (템플릿 관리 메뉴)
@@ -664,7 +646,13 @@ const MonitoringPage = () => {
                     범위: {t.monitoringScope?.join(", ")} | 거래처: {(t as any).clientName ?? '알 수 없음'} | 수집: {t.collectCount}건
                     {t.scheduleEnabled &&
                       t.scheduleCron &&
-                      ` | 자동: ${t.scheduleCron}`}
+                      (() => {
+                        const parts = t.scheduleCron.split(' ');
+                        if (parts[0].startsWith('*/')) return ` | 자동: ⚡ ${parts[0].slice(2)}분마다`;
+                        const h = String(parseInt(parts[1]) || 0).padStart(2, '0');
+                        const m = String(parseInt(parts[0]) || 0).padStart(2, '0');
+                        return ` | 자동: ${h}:${m}`;
+                      })()}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
@@ -717,37 +705,18 @@ const MonitoringPage = () => {
               return [r.clientId, cName];
             })).entries()
           ).map(([id, name]) => ({ id, name }));
-          const filteredResults = resultClientFilter === null ? results : results.filter(r => r.clientId === resultClientFilter);
+          const filteredResults = resultClientFilter === 'all' ? results : results.filter(r => r.clientId === resultClientFilter);
 
           return (
           <div className="space-y-3">
-            {/* 거래처 필터 바 */}
-            {resultClients.length > 1 && (
-              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                <button
-                  onClick={() => setResultClientFilter(null)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                    resultClientFilter === null
-                      ? "bg-violet-600 text-white border-violet-600"
-                      : "bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:border-violet-300"
-                  }`}
-                >
-                  전체
-                </button>
-                {resultClients.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setResultClientFilter(c.id)}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                      resultClientFilter === c.id
-                        ? "bg-violet-600 text-white border-violet-600"
-                        : "bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:border-violet-300"
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
+            {/* 거래처 필터 바 — ClientFilter 공통 컴포넌트 */}
+            {resultClients.length > 0 && (
+              <ClientFilter
+                clients={resultClients}
+                selectedId={resultClientFilter}
+                onSelect={setResultClientFilter}
+                variant="violet"
+              />
             )}
             {filteredResults.length > 0 && canDelete && (
               <div className="flex items-center justify-between bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] px-5 py-3">
@@ -786,7 +755,7 @@ const MonitoringPage = () => {
                   className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]"
                 />
                 <p className="text-[hsl(var(--muted-foreground))]">
-                  {resultClientFilter !== null ? `선택한 거래처의 모니터링 결과가 없습니다.` : `모니터링 결과가 없습니다.`}
+                  {resultClientFilter !== 'all' ? `선택한 거래처의 모니터링 결과가 없습니다.` : `모니터링 결과가 없습니다.`}
                 </p>
               </div>
             )}
@@ -1150,6 +1119,14 @@ export const TemplateFormModal = ({
     }
     return 9;
   });
+  const [scheduleMinute, setScheduleMinute] = useState(() => {
+    if (template?.scheduleCron) {
+      const parts = template.scheduleCron.split(" ");
+      if (parts[0].startsWith("*/")) return 0;
+      return parseInt(parts[0]) || 0;
+    }
+    return 0;
+  });
 
   const isEdit = mode === "edit";
   const hasCafeSpecific = scope.includes("cafe_specific");
@@ -1187,7 +1164,7 @@ export const TemplateFormModal = ({
         scheduleCron: scheduleEnabled
           ? scheduleHour === -1
             ? "*/2 * * * *"
-            : `0 ${scheduleHour} * * *`
+            : `${scheduleMinute} ${scheduleHour} * * *`
           : null,
         searchType,
         notifyEnabled,
@@ -1686,22 +1663,59 @@ export const TemplateFormModal = ({
                 <label className="block text-xs text-[hsl(var(--muted-foreground))] mb-1">
                   매일 실행 시간
                 </label>
-                <select
-                  value={scheduleHour}
-                  onChange={(e) => setScheduleHour(parseInt(e.target.value))}
-                  className={inputCls}
-                >
-                  <option value={-1}>⚡ 2분마다 (테스트)</option>
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <option key={h} value={h}>
-                      {String(h).padStart(2, "0")}:00
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 flex-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={scheduleHour === -1 ? "" : scheduleHour}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        if (!isNaN(v) && v >= 0 && v <= 23) setScheduleHour(v);
+                        else if (e.target.value === "") setScheduleHour(0);
+                      }}
+                      disabled={scheduleHour === -1}
+                      className={`${inputCls} text-center`}
+                      placeholder="시"
+                    />
+                    <span className="text-lg font-bold text-[hsl(var(--foreground))]">:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={scheduleHour === -1 ? "" : scheduleMinute}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        if (!isNaN(v) && v >= 0 && v <= 59) setScheduleMinute(v);
+                        else if (e.target.value === "") setScheduleMinute(0);
+                      }}
+                      disabled={scheduleHour === -1}
+                      className={`${inputCls} text-center`}
+                      placeholder="분"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleHour === -1}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setScheduleHour(-1);
+                      } else {
+                        setScheduleHour(9);
+                        setScheduleMinute(0);
+                      }
+                    }}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">⚡ 2분마다 실행 (테스트용)</span>
+                </label>
                 <p className="text-xs text-violet-600 mt-1">
                   {scheduleHour === -1
                     ? "⚡ 2분마다 자동 실행됩니다 (테스트용)"
-                    : `매일 ${String(scheduleHour).padStart(2, "0")}:00에 자동 실행됩니다`}
+                    : `매일 ${String(scheduleHour).padStart(2, "0")}:${String(scheduleMinute).padStart(2, "0")}에 자동 실행됩니다`}
                 </p>
               </div>
             )}

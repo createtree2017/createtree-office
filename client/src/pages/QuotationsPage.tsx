@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { FileText, Plus, Save, ArrowLeft, Trash2, ChevronRight, ChevronLeft, Check, Search, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import SubNav from '../components/SubNav';
+import ClientFilter from '../components/ClientFilter';
 
 // ===== 타입 =====
 type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
@@ -18,7 +19,7 @@ interface ServiceTier { id?: number; tempId?: string; name: string; minQuantity?
 interface ServiceItemPrice { tierId: number | null; price: number; }
 interface ServiceItem { id?: number; name: string; category: string; isRequired: boolean; priceUnit: string; unitLabel?: string; sortOrder: number; prices: ServiceItemPrice[]; }
 interface Service { id: number; name: string; slug: string; billingType: BillingType; isActive: boolean; tiers: ServiceTier[]; items: ServiceItem[]; }
-interface DiscountPolicy { id: number; name: string; minMonths: number; discountRate: number; isActive: boolean; }
+interface DiscountPolicy { id: number; name: string; minMonths: number; discountType: 'percentage' | 'fixed_amount'; discountRate: number; isActive: boolean; }
 
 const API_Q = '/api/quotations';
 const API_S = '/api/services';
@@ -39,6 +40,7 @@ const QuotationsPage: React.FC = () => {
     const [view, setView] = useState<'list' | 'edit' | 'detail'>('list');
     const [editId, setEditId] = useState<number | null>(null);
     const [step, setStep] = useState(1); // 1~4 단계
+    const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
 
     // 편집 상태
     const [form, setForm] = useState({ clientId: 0, title: '', contractMonths: 6, discountPolicyId: null as number | null, discountApplied: false, notes: '', validUntil: '' });
@@ -170,7 +172,7 @@ const QuotationsPage: React.FC = () => {
     const allItems = Array.from(selectedServices.values()).flatMap(e => e.items);
     const subtotal = allItems.reduce((sum, it) => sum + it.amount, 0);
     const policy = policies.find(p => p.id === form.discountPolicyId);
-    const discountAmount = form.discountApplied && policy ? Math.round(subtotal * policy.discountRate / 100) : 0;
+    const discountAmount = form.discountApplied && policy ? (policy.discountType === 'fixed_amount' ? policy.discountRate : Math.round(subtotal * policy.discountRate / 100)) : 0;
     const totalAmount = subtotal - discountAmount;
     const vatAmount = Math.round(totalAmount * 0.1); // 부가세 10%
     const grandTotal = totalAmount + vatAmount;
@@ -468,7 +470,7 @@ const QuotationsPage: React.FC = () => {
                                     {form.discountApplied && (
                                         <select value={form.discountPolicyId || ''} onChange={e => setForm({ ...form, discountPolicyId: parseInt(e.target.value) || null })} className="p-2 border border-[hsl(var(--border))] rounded-lg text-sm bg-[hsl(var(--background))]">
                                             <option value="">정책 선택</option>
-                                            {policies.map(p => <option key={p.id} value={p.id}>{p.name} ({p.discountRate}%)</option>)}
+                                            {policies.map(p => <option key={p.id} value={p.id}>{p.name} ({p.discountType === 'fixed_amount' ? `${p.discountRate}만원` : `${p.discountRate}%`})</option>)}
                                         </select>
                                     )}
                                 </div>
@@ -512,7 +514,7 @@ const QuotationsPage: React.FC = () => {
 
                             <div className="border-t border-[hsl(var(--border))] pt-4 space-y-1 text-right">
                                 <p className="text-sm">소계: <strong>{subtotal}만원</strong></p>
-                                {discountAmount > 0 && <p className="text-sm text-red-500">할인 ({policy?.discountRate}%): <strong>-{discountAmount}만원</strong></p>}
+                                {discountAmount > 0 && <p className="text-sm text-red-500">할인 ({policy?.discountType === 'fixed_amount' ? `${policy?.discountRate}만원` : `${policy?.discountRate}%`}): <strong>-{discountAmount}만원</strong></p>}
                                 <p className="text-sm">공급가액: <strong>{totalAmount}만원</strong></p>
                                 <p className="text-sm text-[hsl(var(--muted-foreground))]">부가세 (10%): <strong>{vatAmount}만원</strong></p>
                                 <div className="border-t border-[hsl(var(--border))] mt-2 pt-2">
@@ -542,6 +544,12 @@ const QuotationsPage: React.FC = () => {
                     }
                 />
 
+                <ClientFilter
+                    clients={clients}
+                    selectedId={filterClientId}
+                    onSelect={setFilterClientId}
+                />
+
                 {loading ? (
                     <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">불러오는 중...</div>
                 ) : quotations.length === 0 ? (
@@ -564,7 +572,9 @@ const QuotationsPage: React.FC = () => {
                                 <th className="p-3 text-center font-semibold">관리</th>
                             </tr></thead>
                             <tbody>
-                                {quotations.map(q => (
+                                {quotations
+                                    .filter(q => filterClientId === 'all' || q.clientId === filterClientId)
+                                    .map(q => (
                                     <tr key={q.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--accent))] cursor-pointer" onClick={() => handleDetail(q.id)}>
                                         <td className="p-3 font-mono text-xs">{q.quotationNumber}</td>
                                         <td className="p-3 font-medium">{q.clientName}</td>

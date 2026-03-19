@@ -78,6 +78,7 @@ router.put("/discount-policies", authenticateToken, authorizeRole(["ADMIN"]), as
             await db.insert(contractDiscountPolicies).values({
                 name: policy.name,
                 minMonths: policy.minMonths,
+                discountType: policy.discountType || "percentage",
                 discountRate: policy.discountRate,
                 isActive: policy.isActive !== undefined ? policy.isActive : true,
             });

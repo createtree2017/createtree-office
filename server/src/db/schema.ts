@@ -251,7 +251,8 @@ export const contractDiscountPolicies = pgTable("contract_discount_policies", {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     minMonths: integer("min_months").notNull(),
-    discountRate: integer("discount_rate").notNull(), // 백분율 (5 = 5%)
+    discountType: text("discount_type").default("percentage").notNull(), // 'percentage' | 'fixed_amount'
+    discountRate: integer("discount_rate").notNull(), // percentage: 백분율(5=5%), fixed_amount: 만원 단위
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
