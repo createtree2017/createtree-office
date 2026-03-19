@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import SubNav from '../components/SubNav';
+import ClientFilter from '../components/ClientFilter';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -76,6 +77,9 @@ const AdminPage = () => {
 
     // 회원 리스트 정렬 상태
     const [userSortBy, setUserSortBy] = useState<'createdAtDesc' | 'createdAtAsc' | 'nameAsc' | 'role' | 'status'>('createdAtDesc');
+
+    // ===== 거래처(병원) 필터 =====
+    const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
 
     // ===== 계약 서비스 상태 =====
     const [allTemplates, setAllTemplates] = useState<Template[]>([]);
@@ -471,10 +475,33 @@ const AdminPage = () => {
         return 0;
     });
 
+    // 회원 필터 적용
+    const filteredUsers = filterClientId === 'all'
+        ? sortedUsers
+        : filterClientId === 'unassigned'
+            ? sortedUsers.filter(u => !u.clientId)
+            : sortedUsers.filter(u => u.clientId === filterClientId);
+
+    // 병원관리 필터 적용
+    const filteredClients = filterClientId === 'all'
+        ? clients
+        : clients.filter(c => c.id === filterClientId);
+
+    // 계약종료 필터 적용
+    const filteredTerminatedClients = filterClientId === 'all'
+        ? terminatedClients
+        : terminatedClients.filter(c => c.id === filterClientId);
+
     return (
         <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] p-8 md:p-12 lg:p-16 pt-20 md:pt-24">
             <div className="max-w-7xl mx-auto">
                 <SubNav group="client" />
+                <ClientFilter
+                    clients={activeTab === 'terminated' ? terminatedClients : clients}
+                    selectedId={filterClientId}
+                    onSelect={setFilterClientId}
+                    showUnassigned={activeTab === 'users'}
+                />
 
                 {activeTab === 'users' ? (
                     <div className="bento-card overflow-hidden">
@@ -511,7 +538,7 @@ const AdminPage = () => {
                                                 정보 불러오는 중...
                                             </div>
                                         </td></tr>
-                                    ) : sortedUsers.map(u => (
+                                    ) : filteredUsers.map(u => (
                                         <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 group">
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-4">
@@ -640,7 +667,7 @@ const AdminPage = () => {
 
                         {/* 병원 리스트 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                            {clients.map((client, idx) => (
+                            {filteredClients.map((client, idx) => (
                                 <div
                                     key={client.id}
                                     draggable={isSortMode}
@@ -988,7 +1015,7 @@ const AdminPage = () => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                                {terminatedClients.map(client => (
+                                {filteredTerminatedClients.map(client => (
                                     <div key={client.id} className="bento-card p-5 border border-rose-200 dark:border-rose-800/30 bg-rose-50/30 dark:bg-rose-900/10 opacity-80">
                                         <div className="flex items-center gap-3 mb-4">
                                             <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-lg">

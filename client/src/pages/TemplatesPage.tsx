@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Play, Pencil, RefreshCw, Square, LayoutTemplate } from 'lucide-react';
 import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
 import SubNav from '../components/SubNav';
+import ClientFilter from '../components/ClientFilter';
 
 // ===== 업무 템플릿 타입 =====
 type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'file' | 'date' | 'date_range';
@@ -67,7 +68,7 @@ const TemplatesPage: React.FC = () => {
     const [monLoading, setMonLoading] = useState(false);
     const [showMonCreate, setShowMonCreate] = useState(false);
     const [editingMonTemplate, setEditingMonTemplate] = useState<MonitoringTemplate | null>(null);
-    const [monClientFilter, setMonClientFilter] = useState<number | null>(null);
+    const [monClientFilter, setMonClientFilter] = useState<number | 'all' | 'unassigned'>('all');
 
     // ===== 업무 템플릿 로직 =====
     useEffect(() => {
@@ -470,37 +471,18 @@ const TemplatesPage: React.FC = () => {
                     const uniqueMonClients = Array.from(
                         new Map(monTemplates.map(t => [t.clientId, monClients.find(c => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
                     ).map(([id, name]) => ({ id, name }));
-                    const filteredMonTemplates = monClientFilter === null ? monTemplates : monTemplates.filter(t => t.clientId === monClientFilter);
+                    const filteredMonTemplates = monClientFilter === 'all' ? monTemplates : monTemplates.filter(t => t.clientId === monClientFilter);
 
                     return (
                     <div className="space-y-3">
-                        {/* 거래처 필터 바 */}
-                        {!monLoading && uniqueMonClients.length > 1 && (
-                            <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                                <button
-                                    onClick={() => setMonClientFilter(null)}
-                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                                        monClientFilter === null
-                                            ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                                            : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
-                                    }`}
-                                >
-                                    전체
-                                </button>
-                                {uniqueMonClients.map(c => (
-                                    <button
-                                        key={c.id}
-                                        onClick={() => setMonClientFilter(c.id)}
-                                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                                            monClientFilter === c.id
-                                                ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                                                : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:text-[hsl(var(--foreground))] hover:border-violet-300'
-                                        }`}
-                                    >
-                                        {c.name}
-                                    </button>
-                                ))}
-                            </div>
+                        {/* 거래처 필터 바 — ClientFilter 공통 컴포넌트 */}
+                        {!monLoading && uniqueMonClients.length > 0 && (
+                            <ClientFilter
+                                clients={uniqueMonClients}
+                                selectedId={monClientFilter}
+                                onSelect={setMonClientFilter}
+                                variant="violet"
+                            />
                         )}
 
                         {monLoading ? (
@@ -509,9 +491,9 @@ const TemplatesPage: React.FC = () => {
                             <div className="text-center py-16 bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))]">
                                 <Activity size={40} className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]" />
                                 <p className="text-[hsl(var(--muted-foreground))]">
-                                    {monClientFilter !== null ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
+                                    {monClientFilter !== 'all' ? '해당 거래처의 템플릿이 없습니다.' : '모니터링 템플릿이 없습니다.'}
                                 </p>
-                                {monClientFilter === null && (
+                                {monClientFilter === 'all' && (
                                     <button
                                         onClick={() => setShowMonCreate(true)}
                                         className="mt-3 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold"
@@ -558,7 +540,13 @@ const TemplatesPage: React.FC = () => {
                                         )}
                                         <p className="text-xs text-[hsl(var(--muted-foreground))]">
                                             범위: {t.monitoringScope?.join(", ")} | 거래처: {monClients.find((c) => c.id === t.clientId)?.name || t.clientId} | 수집: {t.collectCount}건
-                                            {t.scheduleEnabled && t.scheduleCron && ` | 자동: ${t.scheduleCron}`}
+                                            {t.scheduleEnabled && t.scheduleCron && (() => {
+                                                const parts = t.scheduleCron.split(' ');
+                                                if (parts[0].startsWith('*/')) return ` | 자동: ⚡ ${parts[0].slice(2)}분마다`;
+                                                const h = String(parseInt(parts[1]) || 0).padStart(2, '0');
+                                                const m = String(parseInt(parts[0]) || 0).padStart(2, '0');
+                                                return ` | 자동: ${h}:${m}`;
+                                            })()}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 ml-4">

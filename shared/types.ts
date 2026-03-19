@@ -90,11 +90,14 @@ export interface ServiceCreatePayload {
     })[];
 }
 
+export type DiscountType = 'percentage' | 'fixed_amount';
+
 export interface ContractDiscountPolicy {
     id: number;
     name: string;
     minMonths: number;
-    discountRate: number; // 백분율 (5 = 5%)
+    discountType: DiscountType; // 'percentage' = % 할인, 'fixed_amount' = 금액 할인(만원)
+    discountRate: number; // percentage: 백분율(5=5%), fixed_amount: 만원 단위
     isActive: boolean;
 }
 
