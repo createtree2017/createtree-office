@@ -28,7 +28,7 @@ router.post("/google-sync", async (req, res) => {
             submittedData: data,
         });
 
-        console.log(`[Webhook Success] Data saved to Neon DB`);
+        console.log(`[Webhook Success] Data saved to DB`);
         res.json({ success: true, message: "Synced successfully" });
 
     } catch (error) {

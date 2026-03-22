@@ -8,7 +8,7 @@
   - Frontend: React + TypeScript + Vite + TanStack Query
   - UI: Tailwind CSS + shadcn/ui
   - Backend: Express.js + TypeScript
-  - Database: PostgreSQL (Neon DB + Drizzle ORM)
+  - Database: PostgreSQL (Railway + Drizzle ORM)
   - Editor: Tiptap (Rich Text)
   - Auth: JWT 인증 기반
 
