@@ -9,7 +9,7 @@
 
 ### 플랫폼 개요
 - **createTree Office**: 사내 인수인계 매뉴얼, 업무 효율화, 직원 전용 포털
-- **배포 환경**: 미정 (Vercel/Railway 등 고려)
+- **배포 환경**: Railway (Production)
 
 ### 개발/테스트 계정
 | 구분 | 이메일 | 비밀번호 | 권한 |
@@ -22,7 +22,8 @@
 | Frontend | React + TypeScript + Vite + TanStack Query |
 | UI | Tailwind CSS + shadcn/ui |
 | Backend | Express.js + TypeScript |
-| Database | PostgreSQL (Neon DB + Drizzle ORM) |
+| Database | PostgreSQL (Railway + Drizzle ORM) |
+| DB Driver | `postgres` (postgres.js) + `drizzle-orm/postgres-js` |
 | Editor | Tiptap (Rich Text) |
 | Auth | JWT 인증 기반 (사내 직원 전용) |
 
@@ -30,8 +31,8 @@
 ```
 client/src/          # React 프론트엔드
 server/              # Express 백엔드
+server/src/db/       # Drizzle DB 스키마
 shared/              # 공유 타입/스키마
-db/                  # Drizzle DB 스키마
 docs/                # PDCA 문서
 ```
 
@@ -93,9 +94,28 @@ docs/                # PDCA 문서
 
 ### 핵심 원칙
 - **DRY**: 동일 로직이 2번 나타나면 공통 함수로 추출
-- **SRP**: 하나의 함수는 하나의 책임
+- **SRP (단일 책임 원칙)**: 하나의 함수/파일은 하나의 책임만 가짐
 - **하드코딩 금지**: 의미 있는 상수로 정의
 - **확장성**: 일반화된 패턴으로 작성
+
+### 🚫 모놀리식 방지 및 파일 단위 규칙 (Architecture Limits)
+
+1. **단일 파일 1000줄 제한 (Soft Limit)**: 파일 크기가 1000줄을 초과하기 시작하면 즉시 도메인 로직이나 UI 컴포넌트를 분리해야 합니다.
+2. **백엔드 (Layered Architecture)**: `Router -(요청)-> Controller -(검증)-> Service -(로직)` 패턴을 지킵니다. 라우터 파일에 거대한 분기 로직을 넣지 마세요.
+3. **프론트엔드 (UI-Logic Separation)**: 복잡한 상태 처리나 2개 이상의 API 페칭 로직은 컴포넌트 내부가 아닌 `useName.ts` 형태의 Custom Hook으로 완전히 분리하세요.
+
+### 코딩 전 체크
+
+1. 유사 기능이 이미 존재하는지 검색 (utils/, hooks/, components/ui/)
+2. 존재하면 재사용, 없으면 새로 생성
+3. 기존 코드 패턴과 일관성 유지
+
+### 리팩토링 시점
+
+- 동일 코드가 2번째 등장할 때
+- 함수가 20줄을 초과할 때
+- if-else 중첩이 3단계 이상일 때
+- 구조적 비대화 시점 (파일이 1000줄을 넘어갈 때)
 
 ### TypeScript 규칙
 - `any` 타입 사용 최소화, 구체적 타입 정의
@@ -106,15 +126,93 @@ docs/                # PDCA 문서
 - 컴포넌트는 함수형 컴포넌트만 사용
 - 상태 관리: TanStack Query (서버 상태) + 로컬 상태(Zustand 등 고려 가능)
 - 커스텀 훅으로 비즈니스 로직 분리
+- 조건부 훅 호출 금지
 
 ### Express 규칙
 - 라우트 핸들러에 try-catch 필수
 - 에러는 중앙 에러 핸들러로 전달
 - 인증 미들웨어 사용 패턴 준수 (사내 권한 RBAC 적용)
+- 입력 검증은 라우트 핸들러 초입에서 수행
 
 ### Drizzle ORM 규칙
 - 스키마 변경 시 마이그레이션 파일 생성 인지
 - 복잡한 쿼리는 서비스 레이어에서 처리
+- 트랜잭션 사용 시 에러 롤백 보장
+- **⚠️ `server/src/db/schema.ts`에 컬럼 추가/변경/삭제 시, 반드시 `npx drizzle-kit push`로 DB에 반영** (누락 시 프로덕션 500 에러 발생 — createTree 실제 장애 사례)
+- 프로덕션 DB(Railway)에도 동일 마이그레이션 적용 확인 필수
+
+### ✅ DB 접근 규칙 (Railway PostgreSQL)
+
+> **2026.03.22**: Neon DB → Railway PostgreSQL로 완전 이관 완료.
+> `postgres` (postgres.js) 드라이버 사용. 파일 기반 스크립트로 DB 직접 접근이 가능합니다.
+
+#### DB 작업 방법 (우선순위순)
+
+1. **파일 기반 스크립트 실행** (권장)
+   - `server/scripts/` 폴더에 `.ts` 파일 생성 → `npx tsx scripts/파일명.ts` 실행 (server/ 디렉토리에서)
+   - SELECT, INSERT, UPDATE, DELETE 모두 가능
+   - 작업 완료 후 스크립트 파일 삭제 권장
+
+2. **서버 API 활용** (`npm run dev` 실행 중일 때)
+   - 브라우저 또는 fetch로 `localhost:5050` API 호출
+   - 관리자 페이지 UI에서 직접 처리
+
+3. **Railway 대시보드 SQL Query**
+   - Railway 대시보드 → PostgreSQL 서비스 → Data 탭
+   - 간단한 조회/수정 시 편리
+
+4. **대량 마이그레이션**
+   - 서버에 임시 엔드포인트 추가 후 API로 호출
+   - 또는 `server/scripts/` 폴더에 마이그레이션 스크립트 작성 후 실행
+
+#### ❌ 금지 사항
+- `npx tsx -e "..."` 인라인 스크립트 사용 금지 → 템플릿 리터럴 파싱 오류 발생
+- 스크립트 타임아웃 발생 시 같은 방식 반복 금지 → 즉시 사용자에게 보고
+- 외부 서비스 연결이 안 될 때 AI가 계속 혼자 시도 → **즉시 사용자에게 요청**
+
+#### 스크립트 작성 템플릿
+
+스크립트 파일은 반드시 아래 패턴을 따릅니다:
+
+```typescript
+// server/scripts/example-db-task.ts
+import dotenv from "dotenv";
+import postgres from "postgres";
+
+dotenv.config();
+
+const db = postgres(process.env.DATABASE_URL!, {
+  ssl: { rejectUnauthorized: false },
+  max: 3,
+});
+
+async function main() {
+  try {
+    const result = await db.unsafe("SELECT COUNT(*)::int as cnt FROM users");
+    console.log(result);
+  } catch (err: any) {
+    console.error("DB Error:", err.message);
+  } finally {
+    await db.end();
+    process.exit(0);
+  }
+}
+
+main();
+```
+
+### 🌐 브라우저 테스트 규칙 (개발 환경)
+
+> **이 프로젝트는 사내 직원 전용 시스템**이므로 대부분의 페이지/API가 인증을 필요로 합니다.
+
+#### 로컬 개발 환경 (localhost:5050)
+- 로그인 페이지에서 테스트 계정으로 직접 로그인
+- 이메일: `9059056@gmail.com` / 비밀번호: `123456`
+- 로그인 후 모든 페이지와 API에 인증된 상태로 접근 가능
+
+#### 프로덕션 테스트
+- 프로덕션 URL에서 동일한 관리자 계정으로 로그인하여 테스트
+- 비밀번호는 **6자리** (프론트엔드 최소 6자 검증 통과)
 
 ### 4.5. 아키텍처 및 시스템 규칙
 - **라우터 분리**: 기능/도메인별로 라우터를 분리하여 모듈화 관리 (`server/src/routes/`, `client/src/pages/` 등)
@@ -124,6 +222,23 @@ docs/                # PDCA 문서
 - **중앙집중식 모달/팝업**: 개별 컴포넌트 내 정의 금지. 전역 상태와 커스텀 훅을 통한 중앙 통합 시스템 사용
 - **UI/UX 통일성**: 게시판, 에디터 등 외부 API 연동 UI 포함 모든 요소에 사전 정의된 디자인 시스템 및 인터랙션 규칙 일괄 적용
 - **데이터 흐름**: 중앙 에러 핸들러 및 통일된 API 응답 패턴 준수
+
+### ⚠️ PowerShell 터미널 규칙 (Windows 환경)
+
+> **이 프로젝트는 Windows PowerShell 환경에서 개발됨. Linux/Mac 문법이 그대로 통하지 않음.**
+
+#### 터미널 명령어 규칙
+| 잘못된 방식 (Linux) | 올바른 방식 (PowerShell) |
+|---------------------|--------------------------|
+| `cmd1 && cmd2` | 명령어를 **분리하여 순차 실행** (각각 별도 run_command) |
+| 한글 포함 긴 커밋 메시지 | **영문 단문 커밋 메시지** 사용 |
+
+#### git commit 규칙
+- **한글 커밋 메시지 금지** → PowerShell 파서 오류(`InvalidEndOfLine`) 발생
+- **줄바꿈 포함 메시지 금지** → 파싱 실패
+- **올바른 형식**: `git commit -m "feat: short english summary"`
+- **여러 명령어 연결 금지**: `git add -A && git commit ...` → `&&` 미지원
+- **올바른 순서**: `git add -A` → (완료 확인) → `git commit -m "..."` → `git push origin develop` (각각 별도 실행)
 
 ---
 
@@ -151,6 +266,9 @@ docs/
 - **작성 시점**: 하나의 작업 단위 완료 시 또는 퇴근/장소 이동 전
 - **포함 내용**: 변경 파일 목록, 핵심 변경 내용, 동작 확인 상태, 다음 작업 참고사항
 
+### 종합명세서 (`docs/0-종합명세서/`)
+- 전체 시스템 아키텍처 변경 시 업데이트
+- 파일명: `{순번}-{YYYYMMDD}-종합명세서.md`
 
 ---
 
@@ -190,6 +308,7 @@ docs/
 - 필수 답변규칙
   - !!질문!! 이라는 키워드가 포함된 경우, 코드 수정이나 PDCA 절차 없이 질문에 대한 조사와 답변만 수행합니다. 
   - !!승인!! 이라는 키워드가 포함된 경우, 터미널 권한, 코드 수정이나 PDCA 절차등을 포함한 모든 권한을 이관받아 현재 진행하려는 개발절차에 승인 절차 없이 끝까지 개발을 수행합니다.   
+  - !!푸시!! 이라는 키워드가 포함된 경우, 현재까지 작업한 내역을 git에 푸시합니다. 중요사항이나 설명을 커밋메세지에 포함하여 푸시합니다.
   - !!인수인계!! 이라는 키워드가 포함된 경우, 최근 개발 변경사항을 `docs/05-devlog/` 규칙에 맞게 인수인계 문서로 작성합니다. 코드 수정 없이 문서 작성만 수행합니다.
     - 범위 판단 (우선순위순):
       1. `docs/05-devlog/` 최신 파일 → 마지막 인수인계 시점 확인
@@ -203,3 +322,7 @@ docs/
 - 간결하고 핵심적인 설명
 - 초보 개발자가 이해할 수 있는 수준으로 설명
 - 추측하지 않고, 불확실하면 질문
+
+---
+
+_createTree Office PDCA 개발 시스템 v2.0 — 2026.03.22 Railway 이관 완료_
