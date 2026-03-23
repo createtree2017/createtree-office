@@ -104,6 +104,45 @@ router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (r
 });
 
 // ────────────────────────────────────────────
+// GET /api/quotations/client/:clientId/approved-services
+// 승인된 견적서의 서비스 목록 (거래처 카드 표시용)
+// ────────────────────────────────────────────
+router.get("/client/:clientId/approved-services", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
+    try {
+        const clientId = parseInt(req.params.clientId);
+        if (isNaN(clientId)) return res.status(400).json({ success: false, message: "유효하지 않은 ID" });
+
+        const approvedQuotations = await db.select()
+            .from(quotations)
+            .where(eq(quotations.clientId, clientId));
+
+        const approved = approvedQuotations.filter(q => q.status === 'approved');
+
+        if (approved.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const allConfigs = [];
+        for (const q of approved) {
+            const configs = await db.select()
+                .from(quotationServiceConfigs)
+                .where(eq(quotationServiceConfigs.quotationId, q.id));
+            allConfigs.push(...configs.map(c => ({
+                quotationNumber: q.quotationNumber,
+                serviceName: c.serviceName,
+                billingType: c.billingType,
+                tierName: c.selectedTierName,
+            })));
+        }
+
+        res.json({ success: true, data: allConfigs });
+    } catch (error: any) {
+        console.error("승인 견적 서비스 조회 오류:", error);
+        res.status(500).json({ success: false, message: "조회 중 오류" });
+    }
+});
+
+// ────────────────────────────────────────────
 // GET /api/quotations/:id
 // ────────────────────────────────────────────
 router.get("/:id", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
@@ -315,7 +354,7 @@ router.put("/:id/status", authenticateToken, authorizeRole(["ADMIN"]), async (re
         if (isNaN(id)) return res.status(400).json({ success: false, message: "유효하지 않은 ID입니다." });
 
         const { status } = req.body;
-        const validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired'];
+        const validStatuses = ['draft', 'proposed', 'approved'];
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: `status는 ${validStatuses.join(', ')} 중 하나여야 합니다.` });
         }
@@ -323,7 +362,7 @@ router.put("/:id/status", authenticateToken, authorizeRole(["ADMIN"]), async (re
         const [existing] = await db.select().from(quotations).where(eq(quotations.id, id));
         if (!existing) return res.status(404).json({ success: false, message: "견적서를 찾을 수 없습니다." });
 
-        const statusLabels: Record<string, string> = { draft: '작성중', sent: '발송됨', accepted: '수락됨', rejected: '거절됨', expired: '만료됨' };
+        const statusLabels: Record<string, string> = { draft: '초안', proposed: '제안중', approved: '승인' };
 
         await db.update(quotations).set({
             status,

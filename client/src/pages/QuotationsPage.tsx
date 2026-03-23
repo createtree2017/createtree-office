@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Save, ArrowLeft, Trash2, ChevronRight, ChevronLeft, Check, Search, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -6,7 +7,7 @@ import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
 
 // ===== 타입 =====
-type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+type QuotationStatus = 'draft' | 'proposed' | 'approved';
 type PaymentMethod = 'lump_sum' | 'installment' | 'monthly_settle';
 type BillingType = 'monthly' | 'per_event' | 'one_time' | 'quote_based';
 
@@ -26,14 +27,15 @@ const API_S = '/api/services';
 const API_C = '/api/clients';
 const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
-const STATUS_LABELS: Record<QuotationStatus, string> = { draft: '작성중', sent: '발송', accepted: '수락', rejected: '거절', expired: '만료' };
-const STATUS_COLORS: Record<QuotationStatus, string> = { draft: 'bg-gray-100 text-gray-700', sent: 'bg-blue-100 text-blue-700', accepted: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', expired: 'bg-yellow-100 text-yellow-700' };
+const STATUS_LABELS: Record<QuotationStatus, string> = { draft: '초안', proposed: '제안중', approved: '승인' };
+const STATUS_COLORS: Record<QuotationStatus, string> = { draft: 'bg-gray-100 text-gray-700', proposed: 'bg-blue-100 text-blue-700', approved: 'bg-emerald-100 text-emerald-700' };
 const BILLING_LABELS: Record<BillingType, string> = { monthly: '월정액', per_event: '건당', one_time: '일회성', quote_based: '견적기반' };
 const UNIT_LABELS: Record<string, string> = { per_month: '월', per_event: '회', per_person: '인', per_item: '건', one_time: '일회' };
 
 const QuotationsPage: React.FC = () => {
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
+    const [searchParams] = useSearchParams();
 
     const [quotations, setQuotations] = useState<Quotation[]>([]);
     const [loading, setLoading] = useState(false);
@@ -41,6 +43,19 @@ const QuotationsPage: React.FC = () => {
     const [editId, setEditId] = useState<number | null>(null);
     const [step, setStep] = useState(1); // 1~4 단계
     const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
+
+    // URL ?clientId= 파라미터 수신 (거래처 카드 → 견적서 버튼)
+    useEffect(() => {
+        const cid = searchParams.get('clientId');
+        if (cid) setFilterClientId(parseInt(cid));
+    }, [searchParams]);
+
+    // URL ?viewId= 파라미터 수신 (거래처 카드 → 연결된 견적서 직접 열기)
+    const [autoViewId, setAutoViewId] = useState<number | null>(null);
+    useEffect(() => {
+        const vid = searchParams.get('viewId');
+        if (vid) setAutoViewId(parseInt(vid));
+    }, [searchParams]);
 
     // 편집 상태
     const [form, setForm] = useState({ clientId: 0, title: '', contractMonths: 6, discountPolicyId: null as number | null, discountApplied: false, notes: '', validUntil: '' });
@@ -72,6 +87,14 @@ const QuotationsPage: React.FC = () => {
     }, []);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
+
+    // viewId 자동 열기
+    useEffect(() => {
+        if (autoViewId && quotations.length > 0 && view === 'list') {
+            handleDetail(autoViewId);
+            setAutoViewId(null);
+        }
+    }, [autoViewId, quotations]);
 
     // 새 견적 시작
     const handleNew = () => {
@@ -236,28 +259,30 @@ const QuotationsPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[dq.status]}`}>{STATUS_LABELS[dq.status]}</span>
-                        {user?.role === 'ADMIN' && dq.status === 'draft' && (
+                        {user?.role === 'ADMIN' && (
                             <>
-                                <button onClick={() => handleStatusChange(dq.id, 'sent')} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">발송</button>
-                                <button onClick={() => handleStatusChange(dq.id, 'accepted')} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">수락</button>
-                            </>
-                        )}
-                        {user?.role === 'ADMIN' && dq.status === 'sent' && (
-                            <button onClick={() => handleStatusChange(dq.id, 'accepted')} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">수락</button>
-                        )}
-                        {user?.role === 'ADMIN' && dq.status === 'accepted' && (
-                            <>
-                                <button onClick={() => {
-                                    if (confirm('견적서 수락을 취소하시겠습니까?')) handleStatusChange(dq.id, 'draft');
-                                }} className="px-3 py-1.5 border border-[hsl(var(--border))] rounded-lg text-sm hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]">수락 취소</button>
-                                <button onClick={async () => {
-                                    try {
-                                        const res = await fetch(`/api/contracts/from-quotation/${dq.id}`, { method: 'POST', headers: hdrs(), body: JSON.stringify({}) });
-                                        const data = await res.json();
-                                        if (data.success) { toast.success(data.message); window.location.href = '/contracts'; }
-                                        else toast.error(data.message);
-                                    } catch { toast.error('계약서 생성 실패'); }
-                                }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">📄 계약서 생성</button>
+                                {dq.status === 'draft' && (
+                                    <button onClick={() => handleStatusChange(dq.id, 'proposed')} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">제안중으로</button>
+                                )}
+                                {dq.status === 'proposed' && (
+                                    <>
+                                        <button onClick={() => handleStatusChange(dq.id, 'draft')} className="px-3 py-1.5 border border-[hsl(var(--border))] rounded-lg text-sm hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]">초안으로</button>
+                                        <button onClick={() => handleStatusChange(dq.id, 'approved')} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">승인</button>
+                                    </>
+                                )}
+                                {dq.status === 'approved' && (
+                                    <>
+                                        <button onClick={() => handleStatusChange(dq.id, 'proposed')} className="px-3 py-1.5 border border-[hsl(var(--border))] rounded-lg text-sm hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]">승인 취소</button>
+                                        <button onClick={async () => {
+                                            try {
+                                                const res = await fetch(`/api/contracts/from-quotation/${dq.id}`, { method: 'POST', headers: hdrs(), body: JSON.stringify({}) });
+                                                const data = await res.json();
+                                                if (data.success) { toast.success(data.message); window.location.href = '/contracts'; }
+                                                else toast.error(data.message);
+                                            } catch { toast.error('계약서 생성 실패'); }
+                                        }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">📄 계약서 생성</button>
+                                    </>
+                                )}
                             </>
                         )}
                         <button onClick={() => {

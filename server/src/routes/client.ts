@@ -64,13 +64,12 @@ async function moveFolderTo(drive: any, fileId: string, newParentId: string): Pr
 
 // ────────────────────────────────────────────
 // GET /api/clients
-// 거래처 목록 조회 (기본: 활성 / ?terminated=true: 계약종료)
+// 거래처 목록 조회 — deletedAt IS NULL (삭제되지 않은 거래처만)
 // ────────────────────────────────────────────
 router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
     try {
-        const isTerminated = req.query.terminated === 'true';
         const allClients = await db.select().from(clients)
-            .where(isTerminated ? isNotNull(clients.contractEndedAt) : isNull(clients.contractEndedAt))
+            .where(isNull(clients.deletedAt))
             .orderBy(asc(clients.sortOrder));
         res.json({ success: true, data: allClients });
     } catch (error: any) {
@@ -271,9 +270,9 @@ router.post("/:id/terminate", authenticateToken, authorizeRole(["ADMIN"]), async
 
 // ────────────────────────────────────────────
 // DELETE /api/clients/:id
-// 거래처 완전 삭제 (계약종료 상태만 가능)
-// - 드라이브 폴더 → 휴지통 이동
-// - DB에서 clients 레코드 삭제 (관련 계약/업무 cascade)
+// 거래처 삭제 (소프트 삭제: deletedAt 설정 + 드라이브 폴더 휴지통)
+// - 연결된 견적서/계약서는 그대로 유지 (흐림 표시용)
+// - 모니터링 등 관련 데이터도 유지됨
 // ────────────────────────────────────────────
 router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
     try {
@@ -282,9 +281,6 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
 
         const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
         if (!client) return res.status(404).json({ success: false, message: "거래처를 찾을 수 없습니다." });
-        if (!client.contractEndedAt) {
-            return res.status(409).json({ success: false, message: "계약종료된 거래처만 삭제할 수 있습니다. 먼저 계약종료 처리를 해주세요." });
-        }
 
         // 드라이브 폴더 → 휴지통으로 이동 (영구삭제 아님)
         let driveMsg = "";
@@ -296,7 +292,6 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
                     requestBody: { trashed: true },
                     supportsAllDrives: true,
                 });
-                console.log(`🗑️ 드라이브 폴더 휴지통 이동: ${client.driveFolderId}`);
                 driveMsg = " 드라이브 폴더가 휴지통으로 이동되었습니다.";
             } catch (driveErr: any) {
                 console.warn("Drive trash warning:", driveErr.message);
@@ -304,20 +299,15 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
             }
         }
 
-        // FK cascade/set null가 스키마 레벨에서 처리됨:
-        // - users.clientId → set null
-        // - tasks.clientId → cascade
-        // - clientServiceContracts.clientId → cascade
-        // - monitoringTemplates.clientId → cascade
-        // - monitoringResults.clientId → cascade
-        // - notificationLogs.clientId → cascade
-
-        // DB에서 삭제 (모든 관련 레코드는 FK onDelete로 자동 처리)
-        await db.delete(clients).where(eq(clients.id, clientId));
+        // 소프트 삭제: deletedAt 설정 (DB 레코드 유지, 모니터링 등 영향 없음)
+        const now = new Date();
+        await db.update(clients)
+            .set({ deletedAt: now, updatedAt: now })
+            .where(eq(clients.id, clientId));
 
         res.json({
             success: true,
-            message: `"${client.name}" 거래처가 완전 삭제되었습니다.${driveMsg}`,
+            message: `"${client.name}" 거래처가 삭제되었습니다.${driveMsg}`,
         });
     } catch (error: any) {
         console.error("Client delete error:", error);
@@ -368,6 +358,38 @@ router.post("/sync", authenticateToken, authorizeRole(["ADMIN"]), async (req, re
     } catch (error: any) {
         console.error("Client sync error:", error);
         res.status(500).json({ success: false, message: "동기화 중 오류가 발생했습니다.", errorDetail: error.message });
+    }
+});
+
+// ────────────────────────────────────────────
+// PATCH /api/clients/:id/link — 견적서/계약서 수동 연결/해제
+// body: { linkedQuotationId?: number | null, linkedContractId?: number | null }
+// ────────────────────────────────────────────
+router.patch("/:id/link", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: "유효하지 않은 ID" });
+
+        const [existing] = await db.select().from(clients).where(eq(clients.id, id));
+        if (!existing) return res.status(404).json({ success: false, message: "거래처를 찾을 수 없습니다." });
+
+        const updates: any = { updatedAt: new Date() };
+        const messages: string[] = [];
+
+        if (req.body.linkedQuotationId !== undefined) {
+            updates.linkedQuotationId = req.body.linkedQuotationId;
+            messages.push(req.body.linkedQuotationId ? "견적서 연결됨" : "견적서 연결 해제됨");
+        }
+        if (req.body.linkedContractId !== undefined) {
+            updates.linkedContractId = req.body.linkedContractId;
+            messages.push(req.body.linkedContractId ? "계약서 연결됨" : "계약서 연결 해제됨");
+        }
+
+        await db.update(clients).set(updates).where(eq(clients.id, id));
+        res.json({ success: true, message: messages.join(', ') || "변경사항 없음" });
+    } catch (error: any) {
+        console.error("Link update error:", error);
+        res.status(500).json({ success: false, message: "연결 업데이트 실패" });
     }
 });
 

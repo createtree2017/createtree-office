@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Users, Building2, FileText, FileCheck, XCircle, LayoutTemplate, Package, Briefcase, Settings2 } from 'lucide-react';
+import { Users, Building2, FileText, FileCheck, LayoutTemplate, Package, Briefcase, Settings2 } from 'lucide-react';
 
 // ── 탭 정의 ──
 interface TabItem {
@@ -16,7 +16,6 @@ const CLIENT_TABS: TabItem[] = [
     { label: '병원 관리', icon: Building2, path: '/admin', tab: 'clients' },
     { label: '견적 관리', icon: FileText, path: '/quotations' },
     { label: '계약 관리', icon: FileCheck, path: '/contracts' },
-    { label: '계약 종료', icon: XCircle, path: '/admin', tab: 'terminated' },
 ];
 
 const PRODUCT_TABS: TabItem[] = [
