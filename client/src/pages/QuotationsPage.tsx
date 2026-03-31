@@ -50,12 +50,7 @@ const QuotationsPage: React.FC = () => {
         if (cid) setFilterClientId(parseInt(cid));
     }, [searchParams]);
 
-    // URL ?viewId= 파라미터 수신 (거래처 카드 → 연결된 견적서 직접 열기)
-    const [autoViewId, setAutoViewId] = useState<number | null>(null);
-    useEffect(() => {
-        const vid = searchParams.get('viewId');
-        if (vid) setAutoViewId(parseInt(vid));
-    }, [searchParams]);
+
 
     // 편집 상태
     const [form, setForm] = useState({ clientId: 0, title: '', contractMonths: 6, discountPolicyId: null as number | null, discountApplied: false, notes: '', validUntil: '' });
@@ -86,15 +81,16 @@ const QuotationsPage: React.FC = () => {
         setLoading(false);
     }, []);
 
-    useEffect(() => { fetchAll(); }, [fetchAll]);
-
-    // viewId 자동 열기
+    // 초기 로드: viewId가 있으면 상세 1건만 fetch, 없으면 전체 목록 로드
     useEffect(() => {
-        if (autoViewId && quotations.length > 0 && view === 'list') {
-            handleDetail(autoViewId);
-            setAutoViewId(null);
+        const vid = searchParams.get('viewId');
+        if (vid) {
+            // 바로 상세 API 1건만 호출 (전체 목록 로드 생략)
+            handleDetail(parseInt(vid));
+        } else {
+            fetchAll();
         }
-    }, [autoViewId, quotations]);
+    }, [fetchAll]);
 
     // 새 견적 시작
     const handleNew = () => {

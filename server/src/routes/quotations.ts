@@ -8,7 +8,7 @@ import {
     users,
     contractDiscountPolicies,
 } from "../db/schema.js";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 import { authenticateToken, authorizeRole } from "../middleware/auth.js";
 
 const router = Router();
@@ -75,28 +75,23 @@ async function getQuotationWithDetails(quotationId: number) {
 // ────────────────────────────────────────────
 router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
     try {
-        const allQuotations = await db.select()
-            .from(quotations)
-            .orderBy(desc(quotations.createdAt));
+        const result = await db.select({
+            quotation: quotations,
+            clientName: clients.name,
+            createdByName: users.name
+        })
+        .from(quotations)
+        .leftJoin(clients, eq(quotations.clientId, clients.id))
+        .leftJoin(users, eq(quotations.createdBy, users.id))
+        .orderBy(desc(quotations.createdAt));
 
-        // 각 견적서에 거래처명 추가
-        const result = await Promise.all(
-            allQuotations.map(async (q) => {
-                let clientName = '';
-                if (q.clientId) {
-                    const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, q.clientId));
-                    clientName = client?.name || '';
-                }
-                let createdByName = '';
-                if (q.createdBy) {
-                    const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, q.createdBy));
-                    createdByName = user?.name || '';
-                }
-                return { ...q, clientName, createdByName };
-            })
-        );
+        const formattedResult = result.map(r => ({
+            ...r.quotation,
+            clientName: r.clientName || '',
+            createdByName: r.createdByName || ''
+        }));
 
-        res.json({ success: true, data: result });
+        res.json({ success: true, data: formattedResult });
     } catch (error: any) {
         console.error("견적서 목록 조회 오류:", error);
         res.status(500).json({ success: false, message: "견적서 목록 조회 중 오류가 발생했습니다." });
@@ -104,8 +99,48 @@ router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (r
 });
 
 // ────────────────────────────────────────────
+// GET /api/quotations/all-approved-services
+// 모든 승인된 견적서의 서비스 목록 (AdminPage 거래처 카드 일괄 표시용)
+// ────────────────────────────────────────────
+router.get("/all-approved-services", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
+    try {
+        const approvedQuotations = await db.select()
+            .from(quotations)
+            .where(eq(quotations.status, 'approved'));
+
+        if (approvedQuotations.length === 0) {
+            return res.json({ success: true, data: {} });
+        }
+
+        const qIds = approvedQuotations.map(q => q.id);
+        const configs = await db.select()
+            .from(quotationServiceConfigs)
+            .where(inArray(quotationServiceConfigs.quotationId, qIds));
+
+        // clientId 기준으로 그룹핑
+        const result: Record<number, any[]> = {};
+        for (const q of approvedQuotations) {
+            const qConfigs = configs.filter(c => c.quotationId === q.id);
+            if (!result[q.clientId]) result[q.clientId] = [];
+            
+            result[q.clientId].push(...qConfigs.map(c => ({
+                quotationNumber: q.quotationNumber,
+                serviceName: c.serviceName,
+                billingType: c.billingType,
+                tierName: c.selectedTierName,
+            })));
+        }
+
+        res.json({ success: true, data: result });
+    } catch (error: any) {
+        console.error("전체 승인 견적 서비스 조회 오류:", error);
+        res.status(500).json({ success: false, message: "조회 중 오류가 발생했습니다." });
+    }
+});
+
+// ────────────────────────────────────────────
 // GET /api/quotations/client/:clientId/approved-services
-// 승인된 견적서의 서비스 목록 (거래처 카드 표시용)
+// 승인된 견적서의 서비스 목록 (특정 거래처 카드 표시용)
 // ────────────────────────────────────────────
 router.get("/client/:clientId/approved-services", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (req, res) => {
     try {

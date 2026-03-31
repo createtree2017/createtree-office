@@ -138,6 +138,7 @@ router.get("/results", authenticateToken, async (req: AuthRequest, res) => {
         const results = await monitoringService.getResults(clientId, templateId);
         res.json({ success: true, data: results });
     } catch (error: any) {
+        console.error("결과 목록 조회 중 DB 에러:", error);
         res.status(500).json({ success: false, message: "결과 목록 조회 실패" });
     }
 });

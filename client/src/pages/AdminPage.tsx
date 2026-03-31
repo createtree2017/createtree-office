@@ -119,39 +119,38 @@ const AdminPage = () => {
 
     const fetchClients = async () => {
         try {
-            const response = await fetch('/api/clients', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const result = await response.json();
-            if (result.success) {
-                setClients(result.data);
-                result.data.forEach((c: Client) => { fetchActiveServices(c.id); });
+            const [clientsRes, servicesRes] = await Promise.all([
+                fetch('/api/clients', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }),
+                fetch('/api/quotations/all-approved-services', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+            ]);
+            
+            const clientsResult = await clientsRes.json();
+            const servicesResult = await servicesRes.json();
+
+            if (clientsResult.success) {
+                setClients(clientsResult.data);
+            }
+            
+            if (servicesResult.success && servicesResult.data) {
+                const newServicesMap: Record<number, any> = {};
+                for (const clientId in servicesResult.data) {
+                    const servicesList = servicesResult.data[clientId];
+                    if (servicesList && servicesList.length > 0) {
+                        const svcMap: Record<string, { serviceName: string; items: any[] }> = {};
+                        for (const conf of servicesList) {
+                            if (!svcMap[conf.serviceName]) {
+                                svcMap[conf.serviceName] = { serviceName: conf.serviceName, items: [] };
+                            }
+                            svcMap[conf.serviceName].items.push(conf);
+                        }
+                        newServicesMap[Number(clientId)] = { contractNumber: '', services: Object.values(svcMap) };
+                    }
+                }
+                setActiveServicesMap(newServicesMap);
             }
         } catch (err) {
-            console.error('거래처 목록 불러오기 실패:', err);
+            console.error('거래처 목록 및 서비스 데이터 불러오기 실패:', err);
         }
-    };
-
-    const fetchActiveServices = async (clientId: number) => {
-        try {
-            const res = await fetch(`/api/quotations/client/${clientId}/approved-services`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const data = await res.json();
-            if (data.success && data.data.length > 0) {
-                // 서비스명으로 그룹핑
-                const svcMap: Record<string, { serviceName: string; items: any[] }> = {};
-                for (const conf of data.data) {
-                    if (!svcMap[conf.serviceName]) {
-                        svcMap[conf.serviceName] = { serviceName: conf.serviceName, items: [] };
-                    }
-                    svcMap[conf.serviceName].items.push(conf);
-                }
-                setActiveServicesMap(prev => ({ ...prev, [clientId]: { contractNumber: '', services: Object.values(svcMap) } }));
-            } else {
-                setActiveServicesMap(prev => ({ ...prev, [clientId]: null }));
-            }
-        } catch { /* ignore */ }
     };
 
     // ===== 연결 모달 핸들러 =====
