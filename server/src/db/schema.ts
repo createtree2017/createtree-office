@@ -66,6 +66,7 @@ export const tasks = pgTable("tasks", {
     templateId: integer("template_id").references(() => taskTemplates.id, { onDelete: "set null" }),
     clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
     driveFolderId: text("drive_folder_id"),
+    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
