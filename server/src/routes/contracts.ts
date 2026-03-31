@@ -161,8 +161,8 @@ router.post("/from-quotation/:quotationId", authenticateToken, authorizeRole(["A
             createdBy: userId,
         }).returning();
 
-        // 견적서 상태를 accepted로 업데이트
-        await db.update(quotations).set({ status: "accepted", updatedAt: new Date() }).where(eq(quotations.id, quotationId));
+        // 견적서 상태를 approved로 업데이트
+        await db.update(quotations).set({ status: "approved", updatedAt: new Date() }).where(eq(quotations.id, quotationId));
 
         const full = await getContractDetail(newContract.id);
         res.status(201).json({ success: true, data: full, message: `계약서 ${contractNumber} 생성 완료` });

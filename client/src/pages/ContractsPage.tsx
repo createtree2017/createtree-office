@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { FileText, ArrowLeft, Calendar, Building2, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
 
@@ -30,6 +30,20 @@ const ContractsPage: React.FC = () => {
     const [renewForm, setRenewForm] = useState({ contractMonths: 6, startDate: '', endDate: '', title: '', notes: '', commonTerms: '', specialTerms: '' });
     const [clients, setClients] = useState<{ id: number; name: string }[]>([]);
     const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
+    const [searchParams] = useSearchParams();
+
+    // URL ?clientId= 파라미터 수신 (거래처 카드 → 계약서 버튼)
+    useEffect(() => {
+        const cid = searchParams.get('clientId');
+        if (cid) setFilterClientId(parseInt(cid));
+    }, [searchParams]);
+
+    // URL ?viewId= 파라미터 수신 (거래처 카드 → 연결된 계약서 직접 열기)
+    const [autoViewId, setAutoViewId] = useState<number | null>(null);
+    useEffect(() => {
+        const vid = searchParams.get('viewId');
+        if (vid) setAutoViewId(parseInt(vid));
+    }, [searchParams]);
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
@@ -46,6 +60,14 @@ const ContractsPage: React.FC = () => {
     }, []);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
+
+    // viewId 자동 열기
+    useEffect(() => {
+        if (autoViewId && contracts.length > 0 && view === 'list') {
+            handleDetail(autoViewId);
+            setAutoViewId(null);
+        }
+    }, [autoViewId, contracts]);
 
     const handleDetail = async (id: number) => {
         try {

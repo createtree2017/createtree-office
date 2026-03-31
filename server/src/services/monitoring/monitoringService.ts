@@ -1,6 +1,6 @@
 import { db } from "../../db/index.js";
 import { monitoringTemplates, monitoringResults, clients } from "../../db/schema.js";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { NaverCollector } from "./naverCollector.js";
 import { ContentCrawler } from "./contentCrawler.js";
 import { PlaceCrawler } from "./placeCrawler.js";
@@ -94,16 +94,33 @@ export class MonitoringService {
     }
 
     // ===== Results =====
-
     async getResults(clientId?: number | null, templateId?: number) {
         let conditions = [];
         if (clientId) conditions.push(eq(monitoringResults.clientId, clientId));
         if (templateId) conditions.push(eq(monitoringResults.templateId, templateId));
 
+        // 경량 조회: posts, statistics 등 대용량 jsonb 컬럼 제외, 대신 필수 통계치 추출
+        const lightSelect = {
+            id: monitoringResults.id,
+            templateId: monitoringResults.templateId,
+            templateName: monitoringResults.templateName,
+            clientId: monitoringResults.clientId,
+            status: monitoringResults.status,
+            summary: monitoringResults.summary,
+            executionTimeMs: monitoringResults.executionTimeMs,
+            retryCount: monitoringResults.retryCount,
+            driveFileId: monitoringResults.driveFileId,
+            createdBy: monitoringResults.createdBy,
+            createdAt: monitoringResults.createdAt,
+            updatedAt: monitoringResults.updatedAt,
+            postCount: sql<number>`CASE WHEN jsonb_typeof(${monitoringResults.posts}) = 'array' THEN jsonb_array_length(${monitoringResults.posts}) ELSE 0 END`,
+            overallSentiment: sql<string>`${monitoringResults.statistics}->>'overall_sentiment'`,
+        };
+
         if (conditions.length > 0) {
-            return db.select().from(monitoringResults).where(and(...conditions)).orderBy(desc(monitoringResults.createdAt));
+            return db.select(lightSelect).from(monitoringResults).where(and(...conditions)).orderBy(desc(monitoringResults.createdAt));
         }
-        return db.select().from(monitoringResults).orderBy(desc(monitoringResults.createdAt));
+        return db.select(lightSelect).from(monitoringResults).orderBy(desc(monitoringResults.createdAt));
     }
 
     async getResult(id: number) {

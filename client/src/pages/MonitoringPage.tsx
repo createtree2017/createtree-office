@@ -53,6 +53,7 @@ export interface MonitoringTemplate {
 export interface MonitoringResult {
   id: number;
   templateId: number;
+  templateName?: string;
   clientId: number;
   status: string;
   summary: string | null;
@@ -61,6 +62,8 @@ export interface MonitoringResult {
   createdAt: string;
   posts: any[] | null;
   statistics: any | null;
+  postCount?: number;
+  overallSentiment?: string;
 }
 export interface MonitoringClient {
   id: number;
@@ -119,11 +122,9 @@ const MonitoringPage = () => {
     fetchData();
   }, [fetchData]);
 
-  // 실행 중인 결과 자동 새로고침
+  // 실행 중인 결과 자동 새로고침 (무한 루프 방지: boolean 의존성)
+  const hasRunning = results.some((r) => r.status === "RUNNING" || r.status === "PENDING");
   useEffect(() => {
-    const hasRunning = results.some(
-      (r) => r.status === "RUNNING" || r.status === "PENDING",
-    );
     if (!hasRunning) return;
     const interval = setInterval(async () => {
       try {
@@ -133,7 +134,20 @@ const MonitoringPage = () => {
       } catch { }
     }, 5000);
     return () => clearInterval(interval);
-  }, [results]);
+  }, [hasRunning]);
+
+
+
+  // 결과 상세 보기 (통계, 등 전체 데이터 fetch)
+  const handleSelectResult = async (id: number) => {
+    try {
+      const res = await fetch(`${API}/results/${id}`, { headers: getHeaders() });
+      const data = await res.json();
+      if (data.success) setSelectedResult(data.data);
+    } catch {
+      toast.error('결과 상세 정보를 불러오지 못했습니다.');
+    }
+  };
 
   // 결과 목록 탭에서 30초마다 자동 새로고침 (스케줄 실행 결과 반영)
   useEffect(() => {
@@ -364,11 +378,10 @@ const MonitoringPage = () => {
   };
 
   const completedResults = results.filter((r) => r.status === "COMPLETED");
-  const totalPosts = completedResults.reduce(
-    (sum, r) => sum + (r.posts?.length || 0),
+  const totalPosts = results.reduce(
+    (sum, r) => sum + (r.postCount || 0),
     0,
   );
-  const latestResult = completedResults[0];
 
   return (
     <div className="pt-14 min-h-screen bg-[hsl(var(--background))]">
@@ -411,21 +424,11 @@ const MonitoringPage = () => {
         {/* ========== 대시보드 탭 ========== */}
         {tab === "dashboard" && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { label: "총 템플릿", value: templates.length },
                 { label: "총 분석 횟수", value: completedResults.length },
                 { label: "수집된 게시글", value: totalPosts },
-                {
-                  label: "최근 감성",
-                  value:
-                    latestResult?.statistics?.overall_sentiment === "positive"
-                      ? "긍정적 😊"
-                      : latestResult?.statistics?.overall_sentiment ===
-                        "negative"
-                        ? "부정적 😟"
-                        : "중립 😐",
-                },
               ].map((s, i) => (
                 <div
                   key={i}
@@ -441,65 +444,10 @@ const MonitoringPage = () => {
               ))}
             </div>
 
-            {latestResult?.statistics && (
-              <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-6">
-                <h3 className="font-semibold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
-                  <BarChart3 size={18} /> 최근 분석 결과
-                </h3>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  {[
-                    {
-                      label: "긍정",
-                      pct:
-                        latestResult.statistics.sentiment_distribution
-                          ?.percentage?.positive || 0,
-                      cls: "text-green-600 dark:text-green-400",
-                      bg: "bg-green-500",
-                    },
-                    {
-                      label: "중립",
-                      pct:
-                        latestResult.statistics.sentiment_distribution
-                          ?.percentage?.neutral || 0,
-                      cls: "text-yellow-600 dark:text-yellow-400",
-                      bg: "bg-yellow-500",
-                    },
-                    {
-                      label: "부정",
-                      pct:
-                        latestResult.statistics.sentiment_distribution
-                          ?.percentage?.negative || 0,
-                      cls: "text-red-600 dark:text-red-400",
-                      bg: "bg-red-500",
-                    },
-                  ].map((s, i) => (
-                    <div key={i} className="text-center">
-                      <p className={`text-2xl font-bold ${s.cls}`}>{s.pct}%</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                        {s.label}
-                      </p>
-                      <div className="mt-2 h-2 bg-[hsl(var(--accent))] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${s.bg} rounded-full transition-all`}
-                          style={{ width: `${s.pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {latestResult.summary && (
-                  <div className="bg-[hsl(var(--accent))] rounded-lg p-4 text-sm text-[hsl(var(--foreground))]">
-                    <p className="font-medium mb-1">💡 AI 분석 요약</p>
-                    <p>{latestResult.summary}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-6">
+            <div className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-6 mt-6">
               <h3 className="font-semibold text-[hsl(var(--foreground))] mb-4 flex items-center justify-between">
                 <span className="flex items-center gap-2">
-                  <Clock size={18} /> 최근 활동
+                  <Activity size={18} /> 거래처별 활동
                 </span>
                 <button
                   onClick={fetchData}
@@ -508,44 +456,68 @@ const MonitoringPage = () => {
                   <RefreshCw size={12} /> 새로고침
                 </button>
               </h3>
-              <div className="space-y-2">
-                {results.slice(0, 10).map((r) => {
-                  const tpl = templates.find((t) => t.id === r.templateId);
+              <div className="space-y-3">
+                {clients.map((client) => {
+                  const clientTemplates = templates.filter((t) => t.clientId === client.id);
+                  const clientResults = completedResults.filter((r) => r.clientId === client.id);
+                  const clientPosts = clientResults.reduce((sum, r) => sum + (r.postCount || 0), 0);
+                  
+                  if (clientTemplates.length === 0 && clientResults.length === 0) return null;
+
+                  const positiveCount = clientResults.filter((r) => r.overallSentiment === "positive").length;
+                  const neutralCount = clientResults.filter((r) => r.overallSentiment === "neutral").length;
+                  const negativeCount = clientResults.filter((r) => r.overallSentiment === "negative").length;
+
                   return (
                     <div
-                      key={r.id}
-                      onClick={() =>
-                        r.status === "COMPLETED" && setSelectedResult(r)
-                      }
-                      className={`flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] ${r.status === "COMPLETED" ? "cursor-pointer hover:bg-[hsl(var(--accent))]" : ""} ${!r.templateId ? "opacity-60" : ""} transition-colors`}
+                      key={client.id}
+                      className="p-4 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--accent))] transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        {getSentimentIcon(r.statistics?.overall_sentiment)}
-                        <div>
-                          <p className="text-sm font-medium text-[hsl(var(--foreground))]">
-                            {!r.templateId && <span className="text-[10px] text-red-400 mr-1">[삭제]</span>}
-                            {tpl?.name || (r as any).templateName || '삭제된 템플릿'}
-                          </p>
-                          <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                            {new Date(r.createdAt).toLocaleString("ko-KR")}
-                          </p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold text-sm shrink-0">
+                            {client.name.charAt(0)}
+                          </div>
+                          <h4 className="font-medium text-[hsl(var(--foreground))] text-base truncate max-w-[150px] sm:max-w-[200px]">
+                            {client.name}
+                          </h4>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(r.status)}
-                        {r.status === "RUNNING" && (
-                          <RefreshCw
-                            size={14}
-                            className="text-blue-500 animate-spin"
-                          />
-                        )}
+
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm sm:flex-nowrap">
+                          <div className="flex flex-col min-w-[60px]">
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">템플릿 수</span>
+                            <span className="font-semibold text-[hsl(var(--foreground))]">{clientTemplates.length}</span>
+                          </div>
+                          <div className="flex flex-col min-w-[60px]">
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">분석 횟수</span>
+                            <span className="font-semibold text-[hsl(var(--foreground))]">{clientResults.length}</span>
+                          </div>
+                          <div className="flex flex-col min-w-[80px]">
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">수집된 게시글</span>
+                            <span className="font-semibold text-[hsl(var(--foreground))]">{clientPosts}</span>
+                          </div>
+                          <div className="flex flex-col border-l border-[hsl(var(--border))] pl-6 ml-2 min-w-[150px]">
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))] mb-0.5">분석 감성 추이</span>
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium text-xs">
+                                긍정: {positiveCount}건
+                              </span>
+                              <span className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400 font-medium text-xs">
+                                중립: {neutralCount}건
+                              </span>
+                              <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium text-xs">
+                                부정: {negativeCount}건
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-                {results.length === 0 && (
+                {clients.length === 0 && (
                   <p className="text-center text-sm text-[hsl(var(--muted-foreground))] py-8">
-                    아직 모니터링 결과가 없습니다. 템플릿을 만들고 실행해보세요!
+                    등록된 거래처가 없습니다.
                   </p>
                 )}
               </div>
@@ -765,7 +737,7 @@ const MonitoringPage = () => {
                 <div
                   key={r.id}
                   onClick={() =>
-                    r.status === "COMPLETED" && setSelectedResult(r)
+                    r.status === "COMPLETED" && handleSelectResult(r.id)
                   }
                   className={`bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-center justify-between ${r.status === "COMPLETED" ? "cursor-pointer hover:border-violet-300 dark:hover:border-violet-700" : ""} ${selectedResultIds.has(r.id) ? "border-violet-400 bg-violet-50/50 dark:bg-violet-900/10" : ""} ${!r.templateId ? "opacity-60" : ""} transition-colors`}
                 >
@@ -779,7 +751,7 @@ const MonitoringPage = () => {
                         className="w-4 h-4 rounded accent-violet-600 shrink-0"
                       />
                     )}
-                    {getSentimentIcon(r.statistics?.overall_sentiment)}
+                    {getSentimentIcon(r.overallSentiment)}
                     <div>
                       <p className="font-semibold text-sm text-[hsl(var(--foreground))]">
                         {!r.templateId && <span className="text-[10px] text-red-400 mr-1">[삭제]</span>}
@@ -794,9 +766,9 @@ const MonitoringPage = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {r.status === "COMPLETED" && r.posts && (
+                    {r.status === "COMPLETED" && r.postCount !== undefined && (
                       <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                        {r.posts.length}건
+                        {r.postCount}건
                       </span>
                     )}
                     {getStatusBadge(r.status)}

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { tasks, users, clients, taskTemplates, clientServiceContracts, taskResponses } from "../db/schema.js";
-import { eq, or, desc, and } from "drizzle-orm";
+import { eq, or, desc, asc, and } from "drizzle-orm";
 import { authenticateToken, AuthRequest } from "../middleware/auth.js";
 import { google } from "googleapis";
 
@@ -71,11 +71,41 @@ router.get("/", authenticateToken, async (req: AuthRequest, res) => {
             .leftJoin(taskTemplates, eq(tasks.templateId, taskTemplates.id))
             .leftJoin(clients, eq(tasks.clientId, clients.id))
             .where(or(eq(tasks.assigneeId, userId), eq(tasks.authorId, userId)))
-            .orderBy(desc(tasks.updatedAt));
+            .orderBy(asc(tasks.sortOrder), desc(tasks.updatedAt));
 
         res.json({ success: true, data: taskList });
     } catch (error: any) {
         res.status(500).json({ success: false, message: "업무 목록 조회 중 오류가 발생했습니다." });
+    }
+});
+
+// 업무 순서(Drag & Drop) 변경 일괄 업데이트
+router.put("/reorder", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const { updates } = req.body as { updates: { id: number; status: "PENDING"|"IN_PROGRESS"|"ON_HOLD"|"COMPLETED"; sortOrder: number }[] };
+        
+        if (!Array.isArray(updates) || updates.length === 0) {
+            return res.status(400).json({ success: false, message: "업데이트할 데이터가 없습니다." });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ success: false, message: "인증 정보가 없습니다." });
+
+        await db.transaction(async (tx) => {
+            for (const update of updates) {
+                await tx.update(tasks)
+                    .set({
+                        status: update.status,
+                        sortOrder: update.sortOrder,
+                    })
+                    .where(eq(tasks.id, update.id));
+            }
+        });
+
+        res.json({ success: true, message: "순서가 저장되었습니다." });
+    } catch (error: any) {
+        console.error("Reorder Error:", error);
+        res.status(500).json({ success: false, message: "순서 저장 중 오류가 발생했습니다." });
     }
 });
 
@@ -179,7 +209,7 @@ router.get("/:id", authenticateToken, async (req: AuthRequest, res) => {
 router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
     try {
         const { id } = req.params;
-        const { title, description, status, dueDate, assigneeId } = req.body;
+        const { title, description, status, dueDate, assigneeId, clientId, templateId } = req.body;
         const userId = req.user?.id;
 
         const [task] = await db.select().from(tasks).where(eq(tasks.id, parseInt(id)));
@@ -199,6 +229,8 @@ router.patch("/:id", authenticateToken, async (req: AuthRequest, res) => {
                 status: status ?? task.status,
                 dueDate: dueDate ? new Date(dueDate) : task.dueDate,
                 assigneeId: assigneeId ?? task.assigneeId,
+                clientId: clientId !== undefined ? clientId : task.clientId,
+                templateId: templateId !== undefined ? templateId : task.templateId,
                 updatedAt: new Date(),
             })
             .where(eq(tasks.id, parseInt(id)))

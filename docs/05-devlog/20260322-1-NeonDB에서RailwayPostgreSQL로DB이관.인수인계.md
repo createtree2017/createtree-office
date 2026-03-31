@@ -26,11 +26,9 @@
 - FK CASCADE 문제 → v2 스크립트로 해결 (부모→자식 순서)
 - 로컬 서버 테스트 통과 (스케줄러 19개 정상 등록)
 
-### ⚠️ 남은 작업
-- **Railway 대시보드에서 createtree-office 서비스의 `DATABASE_URL`을 Railway 내부 URL로 변경 필요**
-  - 현재: Neon URL (구버전)
-  - 변경: `postgresql://postgres:WqrCrVkWfezPFbnCestuidJUYfElZzhb@postgres.railway.internal:5432/railway`
-  - 또는 Variable Reference: `${{Postgres.DATABASE_URL}}`
+### ✅ 완료된 작업 (환경 설정)
+- **Railway 대시보드 DATABASE_URL 변경 완료** (Railway 내부망 연결)
+- **GitHub develop → main PR 머지 및 자동 배포 완료**
 
 ---
 
@@ -118,11 +116,9 @@
 - ✅ README.md 현행화 완료
 - ✅ 종합명세서 v3 작성 완료
 - ✅ git commit & push (develop: `7aa5a44`)
-- ❓ **Railway 대시보드에서 DATABASE_URL 변경** (수동 필요)
-- ❓ **GitHub PR (develop → main) 머지** (수동 필요)
+- ✅ **Railway 대시보드에서 DATABASE_URL 변경 완료** (Railway 내부망 연결)
+- ✅ **GitHub PR (develop → main) 머지 및 자동 배포 완료**
 
 ## 다음 작업 참고사항
-1. **Railway 대시보드** → createtree-office → Variables → `DATABASE_URL`을 Railway 내부 URL로 변경
-2. **GitHub** → develop → main PR 생성 & 머지 (자동 배포)
-3. **프로덕션 사이트** 로그인/기능 테스트
-4. **Neon DB 해지** 검토 (createTree 메인과 오피스 모두 Railway 이관 완료 시)
+1. **프로덕션 사이트** 로그인/기능 테스트
+2. **Neon DB 해지** 검토 (createTree 메인과 오피스 모두 Railway 이관 완료 시)

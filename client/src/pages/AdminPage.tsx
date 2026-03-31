@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
 import toast from 'react-hot-toast';
@@ -29,16 +29,27 @@ interface Client {
     contractFileName?: string | null;
     businessRegDriveId?: string | null;
     businessRegFileName?: string | null;
+    linkedQuotationId?: number | null;
+    linkedContractId?: number | null;
+    deletedAt?: string | null;
 }
 
-interface ServiceContract {
+interface LinkableQuotation {
     id: number;
-    clientId: number;
-    templateId: number;
-    driveFolderId?: string | null;
-    templateTitle?: string;
-    templateDescription?: string | null;
-    createdAt: string;
+    quotationNumber: string;
+    title: string;
+    clientName?: string;
+    totalAmount: number;
+    status: string;
+}
+
+interface LinkableContract {
+    id: number;
+    contractNumber: string;
+    title: string;
+    clientName?: string;
+    totalAmount: number;
+    status: string;
 }
 
 interface Template {
@@ -48,9 +59,9 @@ interface Template {
 }
 
 const AdminPage = () => {
+    const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
-    const [terminatedClients, setTerminatedClients] = useState<Client[]>([]); // 계약종료 거래처
     const [loading, setLoading] = useState(true);
     const [newClientName, setNewClientName] = useState('');
     const [creatingClient, setCreatingClient] = useState(false);
@@ -58,39 +69,36 @@ const AdminPage = () => {
     const [isSortMode, setIsSortMode] = useState(false);
     const [draggedClientId, setDraggedClientId] = useState<number | null>(null);
 
-    // 탭 관리 — URL 쿼리 파라미터 연동
+    // 탭 관리
     const [searchParams] = useSearchParams();
-    const tabParam = searchParams.get('tab') as 'users' | 'clients' | 'terminated' | null;
-    const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'terminated'>(tabParam || 'users');
+    const tabParam = searchParams.get('tab') as 'users' | 'clients' | null;
+    const [activeTab, setActiveTab] = useState<'users' | 'clients'>(tabParam || 'users');
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [editingClientId, setEditingClientId] = useState<number | null>(null);
     const [editingClientName, setEditingClientName] = useState('');
     const [businessRegClientId, setBusinessRegClientId] = useState<number | null>(null);
     const [businessRegFile, setBusinessRegFile] = useState<File | null>(null);
 
-    // URL ?tab= 변경 시 탭 동기화
+    // 연결 모달 상태
+    const [linkModal, setLinkModal] = useState<{ type: 'quotation' | 'contract'; clientId: number } | null>(null);
+    const [linkableQuotations, setLinkableQuotations] = useState<LinkableQuotation[]>([]);
+    const [linkableContracts, setLinkableContracts] = useState<LinkableContract[]>([]);
+    const [linkLoading, setLinkLoading] = useState(false);
+
     useEffect(() => {
-        if (tabParam && ['users', 'clients', 'terminated'].includes(tabParam)) {
+        if (tabParam && ['users', 'clients'].includes(tabParam)) {
             setActiveTab(tabParam);
         }
     }, [tabParam]);
 
-    // 회원 리스트 정렬 상태
+    // 회원 정렬
     const [userSortBy, setUserSortBy] = useState<'createdAtDesc' | 'createdAtAsc' | 'nameAsc' | 'role' | 'status'>('createdAtDesc');
-
-    // ===== 거래처(병원) 필터 =====
     const [filterClientId, setFilterClientId] = useState<number | 'all' | 'unassigned'>('all');
-
-    // ===== 계약 서비스 상태 =====
-    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
-    const [contractsMap, setContractsMap] = useState<Record<number, ServiceContract[]>>({});
-    const [addingContractFor, setAddingContractFor] = useState<number | null>(null); // clientId
-    const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]); // 다중 선택
-    const [isAddingContract, setIsAddingContract] = useState(false); // 중복 클릭 방지
 
     // ===== 활성 계약 서비스 상품 상태 =====
     const [activeServicesMap, setActiveServicesMap] = useState<Record<number, { contractNumber: string; services: { serviceName: string; items: any[] }[] } | null>>({});
 
+    // ===== API 호출 =====
     const fetchUsers = async () => {
         try {
             const response = await fetch('/api/admin/users', {
@@ -111,122 +119,88 @@ const AdminPage = () => {
 
     const fetchClients = async () => {
         try {
-            const response = await fetch('/api/clients', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const result = await response.json();
-            if (result.success) {
-                setClients(result.data);
-                result.data.forEach((c: Client) => { fetchContracts(c.id); fetchActiveServices(c.id); });
+            const [clientsRes, servicesRes] = await Promise.all([
+                fetch('/api/clients', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }),
+                fetch('/api/quotations/all-approved-services', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+            ]);
+            
+            const clientsResult = await clientsRes.json();
+            const servicesResult = await servicesRes.json();
+
+            if (clientsResult.success) {
+                setClients(clientsResult.data);
+            }
+            
+            if (servicesResult.success && servicesResult.data) {
+                const newServicesMap: Record<number, any> = {};
+                for (const clientId in servicesResult.data) {
+                    const servicesList = servicesResult.data[clientId];
+                    if (servicesList && servicesList.length > 0) {
+                        const svcMap: Record<string, { serviceName: string; items: any[] }> = {};
+                        for (const conf of servicesList) {
+                            if (!svcMap[conf.serviceName]) {
+                                svcMap[conf.serviceName] = { serviceName: conf.serviceName, items: [] };
+                            }
+                            svcMap[conf.serviceName].items.push(conf);
+                        }
+                        newServicesMap[Number(clientId)] = { contractNumber: '', services: Object.values(svcMap) };
+                    }
+                }
+                setActiveServicesMap(newServicesMap);
             }
         } catch (err) {
-            console.error('거래처 목록 불러오기 실패:', err);
+            console.error('거래처 목록 및 서비스 데이터 불러오기 실패:', err);
         }
     };
 
-    const fetchTerminatedClients = async () => {
+    // ===== 연결 모달 핸들러 =====
+    const openLinkModal = async (type: 'quotation' | 'contract', clientId: number) => {
+        setLinkModal({ type, clientId });
+        setLinkLoading(true);
         try {
-            const response = await fetch('/api/clients?terminated=true', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const result = await response.json();
-            if (result.success) setTerminatedClients(result.data);
-        } catch { /* ignore */ }
-    };
-
-    const fetchTemplates = async () => {
-        try {
-            const res = await fetch('/api/templates', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const data = await res.json();
-            setAllTemplates(Array.isArray(data) ? data : []);
-        } catch { /* ignore */ }
-    };
-
-    const fetchContracts = async (clientId: number) => {
-        try {
-            const res = await fetch(`/api/client-contracts/${clientId}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const data = await res.json();
-            if (data.success) {
-                setContractsMap(prev => ({ ...prev, [clientId]: data.data }));
-            }
-        } catch { /* ignore */ }
-    };
-
-    const fetchActiveServices = async (clientId: number) => {
-        try {
-            const res = await fetch(`/api/contracts/client/${clientId}/services`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const data = await res.json();
-            if (data.success && data.data.length > 0) {
-                setActiveServicesMap(prev => ({ ...prev, [clientId]: { contractNumber: data.contractNumber, services: data.data } }));
-            } else {
-                setActiveServicesMap(prev => ({ ...prev, [clientId]: null }));
-            }
-        } catch { /* ignore */ }
-    };
-
-    const handleAddContract = async (clientId: number) => {
-        if (selectedTemplateIds.length === 0 || isAddingContract) return;
-        setIsAddingContract(true);
-        let successCount = 0;
-        let failMessages: string[] = [];
-        try {
-            // 선택한 템플릿을 순차적으로 등록
-            for (const templateId of selectedTemplateIds) {
-                const res = await fetch('/api/client-contracts', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ clientId, templateId })
+            if (type === 'quotation') {
+                const res = await fetch('/api/quotations', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 });
                 const data = await res.json();
                 if (data.success) {
-                    successCount++;
-                } else {
-                    failMessages.push(data.message || '등록 실패');
+                    // 해당 거래처의 승인된 견적서만 필터
+                    setLinkableQuotations(data.data.filter((q: any) => q.clientId === clientId && q.status === 'approved'));
+                }
+            } else {
+                const res = await fetch('/api/contracts', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // 해당 거래처의 signed/active 계약서만 필터
+                    setLinkableContracts(data.data.filter((c: any) => c.clientId === clientId && ['signed', 'active'].includes(c.status)));
                 }
             }
-
-            if (successCount > 0) {
-                toast.success(`섛비스 ${successCount}건이 계약 등록되었습니다.`);
-            }
-            if (failMessages.length > 0) {
-                toast.error(failMessages.join('\n'));
-            }
-            setAddingContractFor(null);
-            setSelectedTemplateIds([]);
-            fetchContracts(clientId);
-        } catch {
-            toast.error('계약 추가 중 오류가 발생했습니다.');
-        } finally {
-            setIsAddingContract(false);
-        }
+        } catch { toast.error('목록 조회 실패'); }
+        setLinkLoading(false);
     };
 
-    const handleRemoveContract = async (contractId: number, clientId: number) => {
-        if (!window.confirm('이 서비스 계약을 해제하시겠습니까? (드라이브 폴더는 유지됩니다)')) return;
+    const handleLink = async (clientId: number, type: 'quotation' | 'contract', docId: number | null) => {
         try {
-            const res = await fetch(`/api/client-contracts/${contractId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            const body: any = {};
+            if (type === 'quotation') body.linkedQuotationId = docId;
+            else body.linkedContractId = docId;
+
+            const res = await fetch(`/api/clients/${clientId}/link`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify(body),
             });
             const data = await res.json();
             if (data.success) {
                 toast.success(data.message);
-                fetchContracts(clientId);
+                fetchClients();
+                setLinkModal(null);
             } else {
-                toast.error(data.message || '계약 해제 실패');
+                toast.error(data.message);
             }
-        } catch {
-            toast.error('계약 해제 중 오류가 발생했습니다.');
-        }
+        } catch { toast.error('연결 업데이트 실패'); }
     };
 
     const handleSyncClients = async () => {
@@ -239,7 +213,7 @@ const AdminPage = () => {
             const result = await response.json();
             if (result.success) {
                 toast.success(result.message);
-                fetchClients(); // 갱신된 목록 즉시 다시 불러오기
+                fetchClients();
             } else {
                 toast.error(result.message || '동기화에 실패했습니다.');
             }
@@ -279,7 +253,6 @@ const AdminPage = () => {
         }
     };
 
-
     const handleUpdateClient = async (id: number) => {
         if (!editingClientName.trim()) return;
         try {
@@ -292,15 +265,15 @@ const AdminPage = () => {
             });
             const result = await response.json();
             if (result.success) {
-                toast.success('거래처 이름이 수정되고 구글 드라이브와 동기화되었습니다.');
+                toast.success('거래처 이름이 수정되었습니다.');
                 setEditingClientId(null);
                 setEditingClientName('');
                 fetchClients();
             } else {
-                toast.error(result.message || '병원 이름 수정에 실패했습니다.');
+                toast.error(result.message || '수정에 실패했습니다.');
             }
         } catch (err) {
-            toast.error('수정 중 네트워크 오류가 발생했습니다.');
+            toast.error('수정 중 오류가 발생했습니다.');
         }
     };
 
@@ -316,61 +289,21 @@ const AdminPage = () => {
             });
             const result = await response.json();
             if (result.success) {
-                toast.success('📎 사업자등록증 첨부 완료');
+                toast.success('사업자등록증 첨부 완료');
                 setBusinessRegClientId(null);
                 setBusinessRegFile(null);
                 fetchClients();
             } else {
-                toast.error(result.message || '사업자등록증 첨부에 실패했습니다.');
+                toast.error(result.message || '첨부에 실패했습니다.');
             }
         } catch (err) {
-            toast.error('첨부 중 네트워크 오류가 발생했습니다.');
+            toast.error('첨부 중 오류가 발생했습니다.');
         }
     };
 
-
-
-    const handleTelegramInvite = async (clientId: number) => {
-        try {
-            const response = await fetch(`/api/notification/telegram/invite/${clientId}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const result = await response.json();
-            if (result.success) {
-                await navigator.clipboard.writeText(result.data.inviteUrl);
-                toast.success('Telegram 초대 링크가 클립보드에 복사되었습니다!');
-                fetchClients();
-            } else {
-                toast.error(result.message || '초대 링크 생성 실패');
-            }
-        } catch (err) {
-            toast.error('초대 링크 생성 중 오류');
-        }
-    };
-
-    const handleTerminateClient = async (client: Client) => {
-        if (!window.confirm(`"​${client.name}"​ 거래처를 계약종료 처리하시걌습니까?\n\n• 활성 목록에서 숨겨집니다.\n• 구글 드라이브 폴더가 [계약종료] 폴더로 이동됩니다.`)) return;
-        try {
-            const res = await fetch(`/api/clients/${client.id}/terminate`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast.success(data.message);
-                fetchClients();
-                fetchTerminatedClients();
-            } else {
-                toast.error(data.message || '계약종료 실패');
-            }
-        } catch {
-            toast.error('오류가 발생했습니다.');
-        }
-    };
-
+    // 거래처 삭제 (소프트 삭제 — 폴더 휴지통 이동)
     const handleDeleteClient = async (client: Client) => {
-        if (!window.confirm(`⚠️ "${client.name}" 거래처를 완전히 삭제하시겠습니까?\n\n• 드라이브 폴더가 휴지통으로 이동됩니다.\n• 사이트에서 모든 자료가 삭제됩니다.\n\n이 작업은 되돌릴 수 없습니다.`)) return;
+        if (!window.confirm(`"${client.name}" 거래처를 삭제하시겠습니까?\n\n• 드라이브 폴더가 휴지통으로 이동됩니다.\n• 연결된 견적서/계약서는 유지됩니다.`)) return;
         try {
             const res = await fetch(`/api/clients/${client.id}`, {
                 method: 'DELETE',
@@ -379,7 +312,7 @@ const AdminPage = () => {
             const data = await res.json();
             if (data.success) {
                 toast.success(data.message);
-                fetchTerminatedClients();
+                fetchClients();
             } else {
                 toast.error(data.message || '삭제 실패');
             }
@@ -428,8 +361,7 @@ const AdminPage = () => {
     };
 
     const handleDeleteUser = async (id: number) => {
-        if (!window.confirm('❗️이 사용자를 정말 영구적으로 삭제하시겠습니까? (이 작업은 되돌릴 수 없습니다)')) return;
-
+        if (!window.confirm('이 사용자를 정말 삭제하시겠습니까?')) return;
         try {
             const response = await fetch(`/api/admin/users/${id}`, {
                 method: 'DELETE',
@@ -437,73 +369,57 @@ const AdminPage = () => {
             });
             const result = await response.json();
             if (result.success) {
-                toast.success('사용자가 완전 삭제되었습니다.');
+                toast.success('사용자가 삭제되었습니다.');
                 fetchUsers();
             } else {
                 toast.error(result.message || '삭제에 실패했습니다.');
             }
         } catch (err) {
-            toast.error('삭제 중 네트워크 오류가 발생했습니다.');
+            toast.error('삭제 중 오류가 발생했습니다.');
         }
     };
 
     useEffect(() => {
         fetchUsers();
         fetchClients();
-        fetchTerminatedClients();
-        fetchTemplates();
-    }, []);;
+    }, []);
 
-    // 회원 정렬 로직 적용
+    // 회원 정렬
     const sortedUsers = [...users].sort((a, b) => {
-        if (userSortBy === 'createdAtDesc') {
-            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-        }
-        if (userSortBy === 'createdAtAsc') {
-            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-        }
-        if (userSortBy === 'nameAsc') {
-            return a.name.localeCompare(b.name);
-        }
+        if (userSortBy === 'createdAtDesc') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        if (userSortBy === 'createdAtAsc') return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        if (userSortBy === 'nameAsc') return a.name.localeCompare(b.name);
         if (userSortBy === 'role') {
             const roleOrder: any = { 'ADMIN': 1, 'MANAGER': 2, 'HOSPITAL_ADMIN': 3, 'USER': 4 };
             return roleOrder[a.role] - roleOrder[b.role];
         }
-        if (userSortBy === 'status') {
-            return (a.isApproved === b.isApproved) ? 0 : a.isApproved ? 1 : -1;
-        }
+        if (userSortBy === 'status') return (a.isApproved === b.isApproved) ? 0 : a.isApproved ? 1 : -1;
         return 0;
     });
 
-    // 회원 필터 적용
     const filteredUsers = filterClientId === 'all'
         ? sortedUsers
         : filterClientId === 'unassigned'
             ? sortedUsers.filter(u => !u.clientId)
             : sortedUsers.filter(u => u.clientId === filterClientId);
 
-    // 병원관리 필터 적용
     const filteredClients = filterClientId === 'all'
         ? clients
         : clients.filter(c => c.id === filterClientId);
-
-    // 계약종료 필터 적용
-    const filteredTerminatedClients = filterClientId === 'all'
-        ? terminatedClients
-        : terminatedClients.filter(c => c.id === filterClientId);
 
     return (
         <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] p-8 md:p-12 lg:p-16 pt-20 md:pt-24">
             <div className="max-w-7xl mx-auto">
                 <SubNav group="client" />
                 <ClientFilter
-                    clients={activeTab === 'terminated' ? terminatedClients : clients}
+                    clients={clients}
                     selectedId={filterClientId}
                     onSelect={setFilterClientId}
                     showUnassigned={activeTab === 'users'}
                 />
 
                 {activeTab === 'users' ? (
+                    /* ===== 회원 관리 탭 ===== */
                     <div className="bento-card overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
@@ -535,14 +451,14 @@ const AdminPage = () => {
                                         <tr><td colSpan={4} className="px-8 py-24 text-center">
                                             <div className="flex flex-col items-center gap-4 text-slate-400 dark:text-slate-500 font-bold animate-pulse">
                                                 <div className="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-                                                정보 불러오는 중...
+                                                불러오는 중...
                                             </div>
                                         </td></tr>
                                     ) : filteredUsers.map(u => (
                                         <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-200 group">
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-sm group-hover:bg-blue-200 dark:group-hover:bg-blue-500/30 transition-colors">
+                                                    <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-sm">
                                                         {u.name.charAt(0)}
                                                     </div>
                                                     <span className="font-bold text-slate-900 dark:text-white text-[15px]">{u.name}</span>
@@ -569,7 +485,7 @@ const AdminPage = () => {
                                                         >
                                                             <option value="">거래처(병원) 배정 대기중</option>
                                                             {clients.map(c => (
-                                                                <option key={c.id} value={c.id}>🏥 {c.name}</option>
+                                                                <option key={c.id} value={c.id}>{c.name}</option>
                                                             ))}
                                                         </select>
                                                     </div>
@@ -580,18 +496,18 @@ const AdminPage = () => {
                                                     <button
                                                         onClick={() => updateUser(u.id, { isApproved: !u.isApproved })}
                                                         className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-sm ${u.isApproved
-                                                            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 dark:hover:bg-emerald-500 dark:hover:text-white'
-                                                            : 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 hover:bg-rose-500 hover:text-white hover:border-rose-500 dark:hover:bg-rose-500 dark:hover:text-white scale-105'
+                                                            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 hover:bg-emerald-500 hover:text-white'
+                                                            : 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 hover:bg-rose-500 hover:text-white scale-105'
                                                             }`}
                                                     >
                                                         {u.isApproved ? '승인됨' : '승인 대기'}
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteUser(u.id)}
-                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors border border-transparent hover:border-rose-200 dark:hover:border-rose-800/50"
-                                                        title="사용자 완전 삭제"
+                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
+                                                        title="사용자 삭제"
                                                     >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
                                                     </button>
                                                 </div>
                                             </td>
@@ -601,99 +517,68 @@ const AdminPage = () => {
                             </table>
                         </div>
                     </div>
-                ) : activeTab === 'clients' ? (
+                ) : (
+                    /* ===== 병원 관리 탭 ===== */
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pt-2">
-
-                        {/* 리스트 헤더 및 목록 새로고침 버튼 */}
-                        <div className="flex items-center justify-between">
+                        {/* 헤더 */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
                                 등록된 병원 목록
                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs px-2.5 py-0.5 rounded-full font-bold">{clients.length}</span>
                             </h3>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                     onClick={() => setShowRegisterModal(true)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all"
+                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
                                 >
-                                    🏥 병원 등록
+                                    + 병원 등록
                                 </button>
                                 <button
                                     onClick={async () => {
                                         if (isSortMode) {
-                                            // 정렬 모드 OFF → 저장
                                             try {
                                                 const orderedIds = clients.map(c => c.id);
                                                 const res = await fetch('/api/clients/reorder', {
                                                     method: 'PUT',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                                                    },
+                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                                                     body: JSON.stringify({ orderedIds }),
                                                 });
                                                 const data = await res.json();
-                                                if (data.success) toast.success('정렬 순서가 저장되었습니다.');
+                                                if (data.success) toast.success('정렬 저장됨');
                                             } catch { toast.error('정렬 저장 실패'); }
                                         }
                                         setIsSortMode(!isSortMode);
                                     }}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                                         isSortMode
                                             ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md'
                                             : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                                     }`}
                                 >
-                                    {isSortMode ? '✔ 정렬 저장' : '↕️ 정렬'}
+                                    {isSortMode ? '✔ 저장' : '↕ 정렬'}
                                 </button>
-                                <a
-                                    href="https://t.me/createtree_bot"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 px-4 py-2 bg-sky-50 hover:bg-sky-100 dark:bg-sky-500/10 dark:hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded-xl text-sm font-bold transition-all"
-                                >
-                                    🤖 챗봇 등록하기
-                                </a>
                                 <button
                                     onClick={handleSyncClients}
                                     disabled={syncingClients}
-                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
                                 >
                                     <span className={syncingClients ? "animate-spin" : ""}>🔄</span>
-                                    {syncingClients ? "동기화 중..." : "구글 드라이브 목록 새로고침"}
+                                    {syncingClients ? "동기화 중..." : "드라이브 동기화"}
                                 </button>
                             </div>
                         </div>
 
-
-                        {/* 병원 리스트 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                            {filteredClients.map((client, idx) => (
+                        {/* 병원 카드 그리드 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {filteredClients.map((client) => (
                                 <div
                                     key={client.id}
                                     draggable={isSortMode}
-                                    onDragStart={e => {
-                                        if (!isSortMode) return;
-                                        setDraggedClientId(client.id);
-                                        e.dataTransfer.effectAllowed = 'move';
-                                        (e.currentTarget as HTMLElement).style.opacity = '0.4';
-                                    }}
-                                    onDragEnd={e => {
-                                        (e.currentTarget as HTMLElement).style.opacity = '1';
-                                        setDraggedClientId(null);
-                                    }}
-                                    onDragOver={e => {
-                                        if (!isSortMode) return;
-                                        e.preventDefault();
-                                        e.dataTransfer.dropEffect = 'move';
-                                    }}
-                                    onDragEnter={e => {
-                                        if (!isSortMode || draggedClientId === client.id) return;
-                                        e.preventDefault();
-                                        (e.currentTarget as HTMLElement).style.borderColor = 'rgb(59, 130, 246)';
-                                    }}
-                                    onDragLeave={e => {
-                                        (e.currentTarget as HTMLElement).style.borderColor = '';
-                                    }}
+                                    onDragStart={e => { if (!isSortMode) return; setDraggedClientId(client.id); e.dataTransfer.effectAllowed = 'move'; (e.currentTarget as HTMLElement).style.opacity = '0.4'; }}
+                                    onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; setDraggedClientId(null); }}
+                                    onDragOver={e => { if (!isSortMode) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                    onDragEnter={e => { if (!isSortMode || draggedClientId === client.id) return; e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = 'rgb(59, 130, 246)'; }}
+                                    onDragLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = ''; }}
                                     onDrop={e => {
                                         e.preventDefault();
                                         (e.currentTarget as HTMLElement).style.borderColor = '';
@@ -708,341 +593,234 @@ const AdminPage = () => {
                                             return arr;
                                         });
                                     }}
-                                    className={`p-6 bg-white dark:bg-[hsl(var(--card))] border-2 rounded-2xl shadow-sm transition-all relative group flex flex-col justify-between min-h-[140px] ${
+                                    className={`bg-white dark:bg-[hsl(var(--card))] border rounded-xl shadow-sm transition-all relative group ${
                                         isSortMode
                                             ? 'cursor-grab active:cursor-grabbing border-dashed border-slate-300 dark:border-slate-600 hover:border-amber-400'
                                             : 'border-[hsl(var(--border))] hover:border-blue-300 dark:hover:border-blue-500/50'
                                     }`}
                                 >
                                     {editingClientId === client.id ? (
-                                        <div className="flex flex-col gap-3 h-full justify-between animate-in fade-in zoom-in-95 duration-200">
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 mb-2 block">병원명 수정 (드라이브 동기화)</label>
-                                                <input
-                                                    autoFocus
-                                                    type="text"
-                                                    value={editingClientName}
-                                                    onChange={e => setEditingClientName(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-blue-400 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                                    onKeyDown={e => {
-                                                        if (e.key === 'Enter') handleUpdateClient(client.id);
-                                                        if (e.key === 'Escape') setEditingClientId(null);
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="flex justify-end gap-2 mt-4">
-                                                <button
-                                                    onClick={() => { setEditingClientId(null); setEditingClientName(''); }}
-                                                    className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                                >
-                                                    취소 (Esc)
-                                                </button>
-                                                <button
-                                                    onClick={() => handleUpdateClient(client.id)}
-                                                    className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
-                                                >
-                                                    저장 (Enter)
-                                                </button>
+                                        /* 이름 편집 모드 */
+                                        <div className="p-5 flex flex-col gap-3">
+                                            <label className="text-xs font-bold text-slate-500">병원명 수정</label>
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={editingClientName}
+                                                onChange={e => setEditingClientName(e.target.value)}
+                                                className="w-full px-3 py-2 border border-blue-400 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                                onKeyDown={e => { if (e.key === 'Enter') handleUpdateClient(client.id); if (e.key === 'Escape') setEditingClientId(null); }}
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setEditingClientId(null)} className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-lg">취소</button>
+                                                <button onClick={() => handleUpdateClient(client.id)} className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg">저장</button>
                                             </div>
                                         </div>
                                     ) : isSortMode ? (
-                                        <div className="flex flex-col items-center justify-center h-full gap-3 py-4">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400 dark:text-slate-500">
-                                                <circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/>
-                                                <circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/>
-                                                <circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>
-                                            </svg>
-                                            <h3 className="text-lg font-black text-slate-700 dark:text-slate-200 tracking-tight">{client.name}</h3>
+                                        /* 정렬 모드 */
+                                        <div className="flex flex-col items-center justify-center p-8 gap-2">
+                                            <span className="text-2xl text-slate-400">⠿</span>
+                                            <h3 className="text-base font-black text-slate-700 dark:text-slate-200">{client.name}</h3>
                                             <p className="text-[10px] text-slate-400">드래그하여 이동</p>
                                         </div>
                                     ) : (
-                                        <>
-                                            <div>
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-xl shadow-sm border border-blue-100 dark:border-blue-800/50">
-                                                        🏥
-                                                    </div>
-                                                    <button
-                                                        onClick={() => { setEditingClientId(client.id); setEditingClientName(client.name); }}
-                                                        className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-[13px] opacity-0 group-hover:opacity-100 transition-all font-bold flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700"
-                                                    >
-                                                        <span className="text-base">✏️</span> 이름 변경
-                                                    </button>
-                                                </div>
-                                                <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">{client.name}</h3>
-                                                {/* 계약기간 */}
-                                                {(client.contractStartDate || client.contractEndDate) && (
-                                                    <div className="flex items-center gap-1.5 mb-1.5">
-                                                        <span className="text-[10px] font-bold text-slate-400">📅</span>
-                                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                                                            {client.contractStartDate || '?'} ~ {client.contractEndDate || '?'}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {/* 계약서 표시 (읽기전용) */}
-                                                <div>
-                                                    {client.contractFileDriveId ? (
-                                                        <a
-                                                            href={`https://drive.google.com/file/d/${client.contractFileDriveId}/view`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 rounded-full text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors"
-                                                            title={client.contractFileName || '계약서'}
-                                                        >
-                                                            📎 계약서 첨부됨
-                                                        </a>
-                                                    ) : client.contractFileName ? (
-                                                        <a
-                                                            href="/contracts"
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/40 rounded-full text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
-                                                            title={client.contractFileName}
-                                                        >
-                                                            📋 계약서 연동됨
-                                                        </a>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-300 dark:text-slate-600">⚠️ 계약서 없음</span>
-                                                    )}
-                                                </div>
+                                        /* 일반 카드 표시 */
+                                        <div className="p-5 flex flex-col gap-3">
+                                            {/* 거래처 이름 + 편집 */}
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">{client.name}</h3>
+                                                <button
+                                                    onClick={() => { setEditingClientId(client.id); setEditingClientName(client.name); }}
+                                                    className="text-slate-400 hover:text-blue-600 text-xs opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="이름 수정"
+                                                >
+                                                    ✏️
+                                                </button>
+                                            </div>
 
-                                                {/* 사업자등록증 섹션 */}
-                                                <div className="mt-2 flex items-center justify-between">
-                                                    {client.businessRegDriveId ? (
-                                                        <a
-                                                            href={`https://drive.google.com/file/d/${client.businessRegDriveId}/view`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-full text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-100 transition-colors"
-                                                            title={client.businessRegFileName || '사업자등록증'}
-                                                        >
-                                                            🏢 사업자등록증
-                                                        </a>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-300 dark:text-slate-600">🏢 사업자등록증 없음</span>
-                                                    )}
+                                            {/* 계약기간 */}
+                                            {(client.contractStartDate || client.contractEndDate) && (
+                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                    <span>📅</span> {client.contractStartDate || '?'} ~ {client.contractEndDate || '?'}
+                                                </p>
+                                            )}
+
+                                            {/* 버튼 그리드 — 견적서, 계약서, 사업자등록증 */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {/* 견적서 버튼 */}
+                                                <div className="relative">
                                                     <button
                                                         onClick={() => {
-                                                            setBusinessRegClientId(businessRegClientId === client.id ? null : client.id);
-                                                            setBusinessRegFile(null);
+                                                            if (client.linkedQuotationId) {
+                                                                navigate(`/quotations?viewId=${client.linkedQuotationId}`);
+                                                            } else {
+                                                                navigate(`/quotations?clientId=${client.id}`);
+                                                            }
                                                         }}
-                                                        className="text-[10px] font-bold text-slate-400 hover:text-amber-500 transition-colors"
+                                                        className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold transition-all border ${
+                                                            client.linkedQuotationId
+                                                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-600'
+                                                                : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-400 dark:text-indigo-500 border-indigo-200 dark:border-indigo-700/50'
+                                                        } hover:bg-indigo-200 dark:hover:bg-indigo-900/60`}
                                                     >
-                                                        {businessRegClientId === client.id ? '✕ 닫기' : '📎 첨부'}
+                                                        📋 견적서 · <span className="text-[9px]">{client.linkedQuotationId ? '연결됨' : '연결안됨'}</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); openLinkModal('quotation', client.id); }}
+                                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-200 dark:bg-slate-600 rounded-full flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 hover:bg-blue-500 hover:text-white transition-all shadow-sm"
+                                                        title="견적서 연결 관리"
+                                                    >
+                                                        ⚙
                                                     </button>
                                                 </div>
 
-                                                {/* 사업자등록증 업로드 패널 */}
-                                                {businessRegClientId === client.id && (
-                                                    <div className="mt-2 p-3 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700 rounded-xl flex flex-col gap-2 animate-in fade-in duration-200">
-                                                        <label className={`flex items-center gap-2 border border-dashed rounded-lg px-3 py-2 cursor-pointer transition-all ${businessRegFile ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-amber-300'}`}>
-                                                            <span className="text-sm">{businessRegFile ? '📎' : '📂'}</span>
-                                                            <span className="text-xs text-slate-500 truncate flex-1">{businessRegFile ? businessRegFile.name : '사업자등록증 파일 선택'}</span>
-                                                            {businessRegFile && <button type="button" onClick={e => { e.preventDefault(); setBusinessRegFile(null); }} className="text-xs text-slate-400 hover:text-rose-500">✕</button>}
-                                                            <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setBusinessRegFile(e.target.files?.[0] || null)} />
-                                                        </label>
-                                                        <button
-                                                            onClick={() => handleUploadBusinessReg(client)}
-                                                            disabled={!businessRegFile}
-                                                            className="w-full py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-40"
-                                                        >
-                                                            업로드
-                                                        </button>
-                                                    </div>
+                                                {/* 계약서 버튼 */}
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => {
+                                                            if (client.linkedContractId) {
+                                                                navigate(`/contracts?viewId=${client.linkedContractId}`);
+                                                            } else {
+                                                                navigate(`/contracts?clientId=${client.id}`);
+                                                            }
+                                                        }}
+                                                        className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold transition-all border ${
+                                                            client.linkedContractId
+                                                                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600'
+                                                                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-400 dark:text-blue-500 border-blue-200 dark:border-blue-700/50'
+                                                        } hover:bg-blue-200 dark:hover:bg-blue-900/60`}
+                                                    >
+                                                        📄 계약서 · <span className="text-[9px]">{client.linkedContractId ? '연결됨' : '연결안됨'}</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); openLinkModal('contract', client.id); }}
+                                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-200 dark:bg-slate-600 rounded-full flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 hover:bg-blue-500 hover:text-white transition-all shadow-sm"
+                                                        title="계약서 연결 관리"
+                                                    >
+                                                        ⚙
+                                                    </button>
+                                                </div>
+
+                                                {/* 사업자등록증 버튼 */}
+                                                {client.businessRegDriveId ? (
+                                                    <a
+                                                        href={`https://drive.google.com/file/d/${client.businessRegDriveId}/view`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700/50 hover:bg-amber-100"
+                                                    >
+                                                        🏢 사업자등록증
+                                                    </a>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => { setBusinessRegClientId(businessRegClientId === client.id ? null : client.id); setBusinessRegFile(null); }}
+                                                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-amber-400 hover:text-amber-500"
+                                                    >
+                                                        📎 사업자등록증
+                                                    </button>
+                                                )}
+
+                                                {/* 드라이브 버튼 */}
+                                                {client.driveFolderId ? (
+                                                    <a
+                                                        href={`https://drive.google.com/drive/folders/${client.driveFolderId}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-all bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700/50 hover:bg-emerald-100"
+                                                    >
+                                                        📁 드라이브
+                                                    </a>
+                                                ) : (
+                                                    <span className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700">
+                                                        📁 폴더 없음
+                                                    </span>
                                                 )}
                                             </div>
 
-                                            {/* ===== 계약 서비스 섹션 ===== */}
-
-                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">실행 서비스 상품</p>
+                                            {/* 사업자등록증 업로드 패널 */}
+                                            {businessRegClientId === client.id && (
+                                                <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700 rounded-lg flex flex-col gap-2 animate-in fade-in duration-200">
+                                                    <label className={`flex items-center gap-2 border border-dashed rounded-lg px-3 py-2 cursor-pointer transition-all ${businessRegFile ? 'border-amber-400 bg-amber-50' : 'border-slate-200 dark:border-slate-700 hover:border-amber-300'}`}>
+                                                        <span className="text-sm">{businessRegFile ? '📎' : '📂'}</span>
+                                                        <span className="text-xs text-slate-500 truncate flex-1">{businessRegFile ? businessRegFile.name : '파일 선택'}</span>
+                                                        {businessRegFile && <button type="button" onClick={e => { e.preventDefault(); setBusinessRegFile(null); }} className="text-xs text-slate-400 hover:text-rose-500">✕</button>}
+                                                        <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setBusinessRegFile(e.target.files?.[0] || null)} />
+                                                    </label>
+                                                    <button
+                                                        onClick={() => handleUploadBusinessReg(client)}
+                                                        disabled={!businessRegFile}
+                                                        className="w-full py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-40"
+                                                    >
+                                                        업로드
+                                                    </button>
                                                 </div>
+                                            )}
+
+                                            {/* 실행 서비스 상품 */}
+                                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                                                <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500 mb-1.5">실행 서비스</p>
                                                 {activeServicesMap[client.id] ? (
-                                                    <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                                                    <div className="flex flex-wrap gap-1.5">
                                                         {activeServicesMap[client.id]!.services.map((svc, idx) => (
                                                             <span
                                                                 key={idx}
                                                                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-300 rounded-full text-[10px] font-bold"
-                                                                title={svc.items.map(i => i.itemName).join(', ')}
+                                                                title={svc.items.map((i: any) => i.itemName).join(', ')}
                                                             >
                                                                 ✅ {svc.serviceName}
                                                             </span>
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <span className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">활성 계약 서비스 없음</span>
+                                                    <span className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">없음</span>
                                                 )}
                                             </div>
 
-                                            {/* ===== 기존 템플릿 계약 서비스 (숨김 처리) ===== */}
-                                            {/* 필요 시 아래 주석을 해제하여 활성화
-                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500">매뉴얼 서비스</p>
-                                                    {addingContractFor !== client.id && (
-                                                        <button
-                                                            onClick={() => { setAddingContractFor(client.id); setSelectedTemplateIds([]); }}
-                                                            className="text-[10px] font-bold text-blue-500 hover:text-blue-700 transition-colors"
-                                                        >
-                                                            + 추가
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {addingContractFor === client.id && (() => {
-                                                    const available = allTemplates.filter(t =>
-                                                        !(contractsMap[client.id] || []).some((c: ServiceContract) => c.templateId === t.id)
-                                                    );
-                                                    return (
-                                                        <div className="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl animate-in fade-in slide-in-from-top-1 duration-150">
-                                                            {available.length === 0 ? (
-                                                                <p className="text-[10px] text-slate-400 text-center py-1">추가 가능한 서비스가 없습니다</p>
-                                                            ) : (
-                                                                <div className="space-y-1.5 mb-2.5">
-                                                                    {available.map(t => (
-                                                                        <label key={t.id} className="flex items-center gap-2 cursor-pointer group/item">
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={selectedTemplateIds.includes(t.id)}
-                                                                                onChange={e => {
-                                                                                    setSelectedTemplateIds(prev =>
-                                                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
-                                                                                    );
-                                                                                }}
-                                                                                className="w-3.5 h-3.5 rounded text-blue-600 border-blue-300 focus:ring-blue-400 cursor-pointer"
-                                                                            />
-                                                                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors">{t.title}</span>
-                                                                        </label>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                            <div className="flex gap-1.5">
-                                                                <button
-                                                                    onClick={() => handleAddContract(client.id)}
-                                                                    disabled={selectedTemplateIds.length === 0 || isAddingContract}
-                                                                    className="flex-1 py-1.5 text-[10px] font-bold bg-blue-600 text-white rounded-lg disabled:opacity-40 hover:bg-blue-700 transition-colors"
-                                                                >
-                                                                    {isAddingContract ? '등록 중...' : `등록하기 ${selectedTemplateIds.length > 0 ? `(${selectedTemplateIds.length}건)` : ''}`}
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setAddingContractFor(null); setSelectedTemplateIds([]); }}
-                                                                    className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
-                                                                >
-                                                                    취소
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-                                                <div className="flex flex-wrap gap-1.5 min-h-[24px]">
-                                                    {(contractsMap[client.id] || []).length === 0 ? (
-                                                        <span className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">계약된 서비스 없음</span>
-                                                    ) : (
-                                                        (contractsMap[client.id] || []).map((contract: ServiceContract) => (
-                                                            <span
-                                                                key={contract.id}
-                                                                className="group/tag inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700/50 text-indigo-700 dark:text-indigo-300 rounded-full text-[10px] font-bold"
-                                                            >
-                                                                {contract.driveFolderId ? '📁' : '⚠️'} {contract.templateTitle}
-                                                                <button
-                                                                    onClick={() => handleRemoveContract(contract.id, client.id)}
-                                                                    className="opacity-0 group-hover/tag:opacity-100 text-indigo-400 hover:text-red-500 transition-all ml-0.5"
-                                                                    title="계약 해제"
-                                                                >
-                                                                    ×
-                                                                </button>
-                                                            </span>
-                                                        ))
-                                                    )}
-                                                </div>
-                                            </div>
-                                            */}
-
-                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
-                                                <p className="text-[11px] text-slate-400 font-medium break-all flex flex-col gap-1">
-                                                    <span className="uppercase tracking-widest text-[9px] font-bold text-slate-300 dark:text-slate-600">Drive Sync ID</span>
-                                                    <span className="font-mono text-slate-500">{client.driveFolderId || '폴더 연동 없음'}</span>
-                                                </p>
-                                            </div>
-                                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
-                                                <p className="uppercase tracking-widest text-[9px] font-bold text-slate-300 dark:text-slate-600 mb-2">Telegram 알림</p>
+                                            {/* 텔레그램 연동 */}
+                                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                                                <p className="uppercase tracking-widest text-[9px] font-bold text-slate-400 dark:text-slate-500 mb-1.5">Telegram</p>
                                                 {client.telegramChatId ? (
-                                                    <>
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="flex items-center gap-1.5 text-xs font-bold text-green-600 dark:text-green-400">
-                                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                                                연동됨
-                                                            </span>
-                                                            <button
-                                                                onClick={() => handleTelegramDisconnect(client.id)}
-                                                                className="text-[10px] text-slate-400 hover:text-rose-500 font-bold transition-colors"
-                                                            >
-                                                                해제
-                                                            </button>
-                                                        </div>
-                                                    </>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="flex items-center gap-1.5 text-xs font-bold text-green-600 dark:text-green-400">
+                                                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                            연동됨
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleTelegramDisconnect(client.id)}
+                                                            className="text-[10px] text-slate-400 hover:text-rose-500 font-bold transition-colors"
+                                                        >
+                                                            해제
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <button
                                                         onClick={() => {
                                                             navigator.clipboard.writeText(`/연동 ${client.name}`);
-                                                            toast.success('연동 명령어가 복사되었습니다! 텔레그램 그룹에 붙여넣기 하세요.');
+                                                            toast.success('연동 명령어가 복사되었습니다!');
                                                         }}
-                                                        className="w-full py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors flex items-center justify-center gap-2"
+                                                        className="w-full py-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors flex items-center justify-center gap-1"
                                                     >
-                                                        <span>📋</span> 연동 명령어 복사
+                                                        📋 연동 명령어 복사
                                                     </button>
                                                 )}
                                             </div>
-                                        </>
+
+                                            {/* 거래처 삭제 버튼 */}
+                                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                                                <button
+                                                    onClick={() => handleDeleteClient(client)}
+                                                    className="w-full py-1.5 text-[10px] font-bold text-rose-400 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg border border-rose-200 dark:border-rose-800/30 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100"
+                                                >
+                                                    🗑️ 거래처 삭제
+                                                </button>
+                                            </div>
+                                        </div>
                                     )}
-                                    {/* ===== 계약종료 버튼 ===== */}
-                                    <div className="mt-3 pt-3 border-t border-rose-100 dark:border-rose-900/30">
-                                        <button
-                                            onClick={() => handleTerminateClient(client)}
-                                            className="w-full py-2 text-[10px] font-bold text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg border border-rose-200 dark:border-rose-800/40 transition-colors flex items-center justify-center gap-1.5"
-                                        >
-                                            🚫 계약 종료
-                                        </button>
-                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                ) : activeTab === 'terminated' ? (
-                    <div className="animate-in fade-in duration-300">
-                        {terminatedClients.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-24 text-slate-400 dark:text-slate-600">
-                                <span className="text-5xl mb-4">✅</span>
-                                <p className="font-bold text-lg">계약종료된 거래처가 없습니다</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                                {filteredTerminatedClients.map(client => (
-                                    <div key={client.id} className="bento-card p-5 border border-rose-200 dark:border-rose-800/30 bg-rose-50/30 dark:bg-rose-900/10 opacity-80">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-lg">
-                                                🚫
-                                            </div>
-                                            <h3 className="text-base font-black text-slate-700 dark:text-slate-300 line-through">{client.name}</h3>
-                                        </div>
-                                        <div className="mb-4 px-3 py-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
-                                            <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-0.5">계약종료일</p>
-                                            <p className="text-sm font-black text-rose-600 dark:text-rose-400">
-                                                {client.contractEndedAt
-                                                    ? new Date(client.contractEndedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
-                                                    : '-'}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => handleDeleteClient(client)}
-                                            className="w-full py-2 text-[11px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800/40 transition-colors"
-                                        >
-                                            🗑️ 거래처 완전 삭제
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                ) : null}
+                )}
             </div>
 
             {/* ===== 병원 등록 모달 ===== */}
@@ -1052,20 +830,15 @@ const AdminPage = () => {
                     onClick={e => { if (e.target === e.currentTarget) setShowRegisterModal(false); }}
                 >
                     <div className="w-full max-w-md bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-slate-200 dark:border-[hsl(var(--border))] animate-in fade-in zoom-in-95 duration-200">
-                        {/* 모달 헤더 */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
                             <div>
                                 <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-0.5">신규 등록</p>
-                                <h2 className="text-lg font-black text-slate-900 dark:text-white">🏥 병원(거래처) 등록</h2>
+                                <h2 className="text-lg font-black text-slate-900 dark:text-white">병원(거래처) 등록</h2>
                             </div>
                             <button onClick={() => setShowRegisterModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors font-bold text-lg">✕</button>
                         </div>
-
-                        {/* 모달 본문 */}
                         <form onSubmit={handleCreateClient} className="p-6 flex flex-col gap-4">
-                            <p className="text-xs text-slate-400 -mt-2">등록 시 구글 드라이브 내에 <strong className="text-blue-500">전용 폴더가 자동 생성</strong>되고 즉시 권한을 배정할 수 있습니다.</p>
-
-                            {/* 병원명 */}
+                            <p className="text-xs text-slate-400 -mt-2">등록 시 구글 드라이브 내에 <strong className="text-blue-500">전용 폴더가 자동 생성</strong>됩니다.</p>
                             <div className="flex flex-col gap-1.5">
                                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">병원명 *</span>
                                 <input
@@ -1077,15 +850,97 @@ const AdminPage = () => {
                                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-bold"
                                 />
                             </div>
-
-                            {/* 버튼 */}
                             <div className="flex gap-3 pt-1">
                                 <button type="button" onClick={() => setShowRegisterModal(false)} className="flex-1 py-3 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 transition-all">취소</button>
                                 <button type="submit" disabled={creatingClient || !newClientName.trim()} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50">
-                                    {creatingClient ? '생성 중...' : '등록 및 폴더 동기화'}
+                                    {creatingClient ? '생성 중...' : '등록'}
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 연결 모달 */}
+            {linkModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLinkModal(null)}>
+                    <div className="w-full max-w-md bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-slate-200 dark:border-[hsl(var(--border))] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+                            <div>
+                                <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-0.5">
+                                    {linkModal.type === 'quotation' ? '견적서' : '계약서'} 연결
+                                </p>
+                                <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                                    {clients.find(c => c.id === linkModal.clientId)?.name}
+                                </h2>
+                            </div>
+                            <button onClick={() => setLinkModal(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors font-bold text-lg">✕</button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3 max-h-80 overflow-y-auto">
+                            {linkLoading ? (
+                                <p className="text-center text-sm text-slate-400 py-6">불러오는 중...</p>
+                            ) : linkModal.type === 'quotation' ? (
+                                linkableQuotations.length === 0 ? (
+                                    <p className="text-center text-sm text-slate-400 py-6">승인된 견적서가 없습니다</p>
+                                ) : (
+                                    linkableQuotations.map(q => {
+                                        const currentClient = clients.find(c => c.id === linkModal.clientId);
+                                        const isLinked = currentClient?.linkedQuotationId === q.id;
+                                        return (
+                                            <button
+                                                key={q.id}
+                                                onClick={() => handleLink(linkModal.clientId, 'quotation', isLinked ? null : q.id)}
+                                                className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between ${
+                                                    isLinked
+                                                        ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-600'
+                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                                                }`}
+                                            >
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{q.title}</p>
+                                                    <p className="text-[10px] text-slate-400">{q.quotationNumber} · {q.totalAmount}만원</p>
+                                                </div>
+                                                {isLinked ? (
+                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">연결됨 ✕</span>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-slate-400">선택</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })
+                                )
+                            ) : (
+                                linkableContracts.length === 0 ? (
+                                    <p className="text-center text-sm text-slate-400 py-6">서명/활성 상태의 계약서가 없습니다</p>
+                                ) : (
+                                    linkableContracts.map(c => {
+                                        const currentClient = clients.find(cl => cl.id === linkModal.clientId);
+                                        const isLinked = currentClient?.linkedContractId === c.id;
+                                        return (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => handleLink(linkModal.clientId, 'contract', isLinked ? null : c.id)}
+                                                className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between ${
+                                                    isLinked
+                                                        ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600'
+                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                                                }`}
+                                            >
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{c.title}</p>
+                                                    <p className="text-[10px] text-slate-400">{c.contractNumber} · {c.totalAmount}만원</p>
+                                                </div>
+                                                {isLinked ? (
+                                                    <span className="text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">연결됨 ✕</span>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-slate-400">선택</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })
+                                )
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

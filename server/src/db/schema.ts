@@ -17,7 +17,10 @@ export const clients = pgTable("clients", {
     contractFileName: text("contract_file_name"),          // 계약서 원본 파일명
     businessRegDriveId: text("business_reg_drive_id"),    // 사업자등록증 Drive 파일 ID
     businessRegFileName: text("business_reg_file_name"),   // 사업자등록증 원본 파일명
+    linkedQuotationId: integer("linked_quotation_id"),      // 수동 연결된 견적서 ID
+    linkedContractId: integer("linked_contract_id"),        // 수동 연결된 계약서 ID
     sortOrder: integer("sort_order").default(0).notNull(), // 수동 정렬 순서
+    deletedAt: timestamp("deleted_at"),                    // 거래처 삭제 일시 (null=활성, not null=삭제됨)
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -63,6 +66,7 @@ export const tasks = pgTable("tasks", {
     templateId: integer("template_id").references(() => taskTemplates.id, { onDelete: "set null" }),
     clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
     driveFolderId: text("drive_folder_id"),
+    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -261,11 +265,9 @@ export const contractDiscountPolicies = pgTable("contract_discount_policies", {
 // ===== 견적서 시스템 =====
 
 export const quotationStatusEnum = pgEnum("quotation_status", [
-    "draft",       // 작성 중
-    "sent",        // 발송됨
-    "accepted",    // 수락됨
-    "rejected",    // 거절됨
-    "expired",     // 만료됨
+    "draft",       // 초안
+    "proposed",    // 제안중
+    "approved",    // 승인
 ]);
 
 export const paymentMethodEnum = pgEnum("payment_method", [

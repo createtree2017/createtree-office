@@ -4,6 +4,7 @@ import 'react-calendar/dist/Calendar.css';
 import { useModal } from '../contexts/ModalContext';
 import CreateTaskModal from '../components/CreateTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
+import ExpandedColumnModal from '../components/ExpandedColumnModal';
 import toast from 'react-hot-toast';
 import { Plus, CheckCircle2, Clock, PauseCircle, AlertCircle, LayoutGrid, CalendarDays } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -22,6 +23,7 @@ interface Task {
     clientId?: number | null;
     clientName?: string | null;
     driveFolderId?: string | null;
+    sortOrder?: number;
 }
 
 /* 상태별 스타일 정의 */
@@ -86,6 +88,7 @@ const TasksPage = () => {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'list' | 'calendar'>('list');
+    const [selectedClientId, setSelectedClientId] = useState<number | 'ALL'>('ALL');
     const { openModal } = useModal();
 
     const fetchTasks = async () => {
@@ -94,7 +97,14 @@ const TasksPage = () => {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
             const result = await response.json();
-            if (result.success) setTasks(result.data);
+            if (result.success) {
+                const processed = result.data.map((t: any) => ({
+                    ...t,
+                    clientId: t.clientId || 0,
+                    clientName: t.clientName || '내부업무'
+                }));
+                setTasks(processed);
+            }
         } catch (err) {
             toast.error('업무 목록을 불러오지 못했습니다.');
         } finally {
@@ -104,6 +114,27 @@ const TasksPage = () => {
 
     useEffect(() => { fetchTasks(); }, []);
 
+    // 거래처별 업무 개수 집계 (완료 제외)
+    const activeTaskCount = tasks.filter(t => t.status !== 'COMPLETED').length;
+    
+    const clientAgg = tasks.reduce((acc, t) => {
+        const id = t.clientId || 0;
+        const name = t.clientName || '내부업무';
+        if (!acc[id]) acc[id] = { id, name, count: 0 };
+        if (t.status !== 'COMPLETED') {
+            acc[id].count += 1;
+        }
+        return acc;
+    }, {} as Record<number, { id: number; name: string; count: number }>);
+    const activeClients = Object.values(clientAgg).sort((a, b) => {
+        if (a.id === 0) return -1;
+        if (b.id === 0) return 1;
+        return a.name.localeCompare(b.name, 'ko-KR');
+    });
+    
+    // 선택된 거래처에 따른 필터링 적용
+    const filteredTasks = selectedClientId === 'ALL' ? tasks : tasks.filter(t => (t.clientId || 0) === selectedClientId);
+
     const handleCreateTask = () => openModal(<CreateTaskModal onSuccess={fetchTasks} />);
     const handleTaskClick = (task: Task) => openModal(<TaskDetailModal task={task} onSuccess={fetchTasks} />);
 
@@ -112,26 +143,68 @@ const TasksPage = () => {
         if (!destination) return;
         if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
+        if (selectedClientId !== 'ALL') {
+            toast.error('거래처 필터가 적용된 상태에서는 순서를 변경할 수 없습니다.\n전체 보기 상태에서 이용해 주세요.', { duration: 4000 });
+            return;
+        }
+
         const taskId = parseInt(draggableId);
         const newStatus = destination.droppableId as Task['status'];
+        const oldStatus = source.droppableId as Task['status'];
         const previousTasks = [...tasks];
-        setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+
+        // 1. 컬럼 분리 및 순서 정렬
+        const newTasks = [...tasks];
+        const sourceColumnTasks = newTasks
+            .filter(t => t.status === oldStatus)
+            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        
+        let destColumnTasks = oldStatus === newStatus 
+            ? sourceColumnTasks 
+            : newTasks.filter(t => t.status === newStatus).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+        // 2. 업무 이동 (제거 후 삽입)
+        const [movedTask] = sourceColumnTasks.splice(source.index, 1);
+        movedTask.status = newStatus;
+
+        if (oldStatus === newStatus) {
+            sourceColumnTasks.splice(destination.index, 0, movedTask);
+        } else {
+            destColumnTasks.splice(destination.index, 0, movedTask);
+        }
+
+        // 3. 도착 컬럼의 새 순서 부여 및 API 페이로드(업데이트 목록) 생성
+        const updates: { id: number, status: Task['status'], sortOrder: number }[] = [];
+        
+        destColumnTasks.forEach((t, i) => {
+            t.sortOrder = i;
+            updates.push({ id: t.id, status: t.status, sortOrder: i });
+        });
+
+        // 메인 배열 상태 업데이트 (Optimistic Update)
+        const finalTasks = newTasks.map(t => {
+            if (t.id === taskId) return movedTask;
+            const updatedInDest = destColumnTasks.find(d => d.id === t.id);
+            if (updatedInDest) return updatedInDest;
+            return t;
+        });
+        
+        // 리렌더링 버그 방지를 위해 새로운 배열로 세팅하며 sort() 적용은 렌더링 측에서 처리됨
+        setTasks(finalTasks);
 
         try {
-            const response = await fetch(`/api/tasks/${taskId}`, {
-                method: 'PATCH',
+            const response = await fetch('/api/tasks/reorder', {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ status: newStatus }),
+                body: JSON.stringify({ updates }),
             });
             const resData = await response.json();
             if (!resData.success) {
                 toast.error(resData.message || '상태 변경 권한이 없습니다.');
                 setTasks(previousTasks);
-            } else {
-                toast.success(`'${STATUS_CONFIG[newStatus].label}' 으로 이동했습니다.`);
             }
         } catch {
-            toast.error('상태 변경 중 오류가 발생했습니다.');
+            toast.error('순서 변경 중 네트워크 오류가 발생했습니다.');
             setTasks(previousTasks);
         }
     };
@@ -143,16 +216,37 @@ const TasksPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     {statuses.map(status => {
                         const cfg = STATUS_CONFIG[status];
-                        const columnTasks = tasks.filter(t => t.status === status);
+                        const columnTasks = filteredTasks
+                            .filter(t => t.status === status)
+                            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                        const visibleColumnTasks = columnTasks.slice(0, 10);
+                        const isOverflow = columnTasks.length > 10;
                         return (
                             <div key={status} className="flex flex-col gap-4">
-                                {/* 컬럼 헤더 */}
-                                <div className={`flex items-center justify-between px-2 pb-3 ${cfg.headerClass}`}>
+                                {/* 컬럼 헤더 (상세조회 토글 부여) */}
+                                <div 
+                                    className={`flex items-center justify-between px-3 py-3 rounded-t-xl transition-all cursor-pointer ${cfg.headerClass} hover:bg-slate-200/50 dark:hover:bg-slate-800/50 active:scale-[0.98] group`}
+                                    onClick={() => {
+                                        openModal(
+                                            <ExpandedColumnModal
+                                                status={status}
+                                                label={cfg.label}
+                                                icon={cfg.icon}
+                                                tasks={columnTasks}
+                                                dotClass={cfg.dotClass}
+                                                headerClass={cfg.headerClass}
+                                                handleTaskClick={handleTaskClick}
+                                                fetchTasks={fetchTasks}
+                                                selectedClientId={selectedClientId}
+                                            />
+                                        );
+                                    }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`}></span>
-                                        <span className="text-[13px] font-extrabold uppercase tracking-wider">{cfg.label}</span>
+                                        <span className="text-[13px] font-extrabold uppercase tracking-wider group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{cfg.label}</span>
                                     </div>
-                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${cfg.countClass}`}>{columnTasks.length}</span>
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${cfg.countClass} group-hover:shadow-sm`}>{columnTasks.length} {isOverflow ? '(10개 표시)' : ''}</span>
                                 </div>
                                 <Droppable droppableId={status}>
                                     {(provided, snapshot) => (
@@ -161,7 +255,7 @@ const TasksPage = () => {
                                             {...provided.droppableProps}
                                             className={`flex flex-col gap-3 min-h-[480px] p-2 rounded-2xl transition-all duration-300 ${snapshot.isDraggingOver ? cfg.dropOverClass : 'bg-slate-100/50 dark:bg-slate-800/20 border border-dashed border-slate-300 dark:border-slate-700'}`}
                                         >
-                                            {columnTasks.map((task, index) => (
+                                            {visibleColumnTasks.map((task, index) => (
                                                 <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
                                                     {(provided, snapshot) => (
                                                         <div
@@ -192,28 +286,66 @@ const TasksPage = () => {
                                                                     {task.description}
                                                                 </p>
                                                             )}
-                                                            {/* 하단: 담당자 + 마감일 */}
-                                                            <div className="flex items-center justify-between pt-3 border-t-2 border-slate-200 dark:border-slate-600">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-6 h-6 rounded-full bg-blue-500/20 dark:bg-blue-500/30 flex items-center justify-center text-[10px] font-black text-blue-700 dark:text-blue-300 border border-blue-400/30 dark:border-blue-400/40">
-                                                                        {task.assigneeName.charAt(0)}
-                                                                    </div>
-                                                                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">{task.assigneeName}</span>
+                                                            {/* 하단: 거래처 + 담당자 + 마감일 */}
+                                                            <div className="flex flex-col gap-2.5 pt-3 border-t-2 border-slate-200 dark:border-slate-600">
+                                                                {/* 거래처 및 템플릿 배지 */}
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600/50 max-w-full truncate">
+                                                                        {task.clientName || '내부업무'}
+                                                                    </span>
+                                                                    {task.templateTitle && (
+                                                                        <>
+                                                                            <span className="text-slate-300 dark:text-slate-600 text-[10px]">|</span>
+                                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 max-w-full truncate">
+                                                                                {task.templateTitle}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </div>
-                                                                {task.dueDate && (
-                                                                    <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                                                        <Clock size={11} />
-                                                                        <span className="text-[10px] font-semibold">
-                                                                            {new Date(task.dueDate.slice(0, 10) + 'T00:00:00').toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                                                                        </span>
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-6 h-6 rounded-full bg-blue-500/20 dark:bg-blue-500/30 flex items-center justify-center text-[10px] font-black text-blue-700 dark:text-blue-300 border border-blue-400/30 dark:border-blue-400/40">
+                                                                            {task.assigneeName.charAt(0)}
+                                                                        </div>
+                                                                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">{task.assigneeName}</span>
                                                                     </div>
-                                                                )}
+                                                                    {task.dueDate && (
+                                                                        <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                                                                            <Clock size={11} />
+                                                                            <span className="text-[10px] font-semibold">
+                                                                                {new Date(task.dueDate.slice(0, 10) + 'T00:00:00').toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     )}
                                                 </Draggable>
                                             ))}
                                             {provided.placeholder}
+                                            {isOverflow && (
+                                                <div 
+                                                    className="w-full text-center py-3 text-slate-400 font-bold text-xs cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors border border-dashed border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-800/30"
+                                                    onClick={() => {
+                                                        openModal(
+                                                            <ExpandedColumnModal
+                                                                status={status}
+                                                                label={cfg.label}
+                                                                icon={cfg.icon}
+                                                                tasks={columnTasks}
+                                                                dotClass={cfg.dotClass}
+                                                                headerClass={cfg.headerClass}
+                                                                handleTaskClick={handleTaskClick}
+                                                                fetchTasks={fetchTasks}
+                                                                selectedClientId={selectedClientId}
+                                                            />
+                                                        );
+                                                    }}
+                                                >
+                                                    + {columnTasks.length - 10}개 숨겨짐 (클릭하여 전체보기)
+                                                </div>
+                                            )}
                                             {/* 빈 컬럼 안내 */}
                                             {columnTasks.length === 0 && (
                                                 <div className="flex-1 flex items-center justify-center text-slate-400 dark:text-slate-600 text-xs font-semibold py-12">
@@ -272,7 +404,7 @@ const TasksPage = () => {
                         handleCalendarDayClick(date);
                     }}
                     tileContent={({ date }: { date: Date }) => {
-                        const dayTasks = tasks.filter(t => t.dueDate && isSameLocalDate(new Date(t.dueDate), date));
+                        const dayTasks = filteredTasks.filter(t => t.dueDate && isSameLocalDate(new Date(t.dueDate), date));
                         return (
                             <Droppable droppableId={`cal_${date.getTime()}`}>
                                 {(provided, snapshot) => (
@@ -403,6 +535,45 @@ const TasksPage = () => {
                         </button>
                     </div>
                 </div>
+
+                {/* 거래처 필터 */}
+                {!loading && tasks.length > 0 && (
+                    <div className="mb-8">
+                        <p className="text-[12px] text-slate-400 dark:text-slate-500 font-bold mb-2 ml-1">* 완료를 제외한 업무의 카운팅</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={() => setSelectedClientId('ALL')}
+                                className={`px-4 py-2 rounded-full text-sm font-bold transition-all border ${
+                                    selectedClientId === 'ALL'
+                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                                        : 'bg-transparent border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                            >
+                                전체 ({activeTaskCount})
+                            </button>
+                            {activeClients.map(c => (
+                                <button
+                                    key={c.id}
+                                    onClick={() => setSelectedClientId(c.id)}
+                                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all border flex items-center gap-1.5 ${
+                                        selectedClientId === c.id
+                                            ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                                            : 'bg-transparent border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                                >
+                                    {c.name}
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                                        selectedClientId === c.id
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                    }`}>
+                                        {c.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 콘텐츠 */}
                 {loading ? (
