@@ -94,6 +94,7 @@ const MonitoringPage = () => {
   );
   const [clientFilter, setClientFilter] = useState<number | 'all' | 'unassigned'>('all');
   const [resultClientFilter, setResultClientFilter] = useState<number | 'all' | 'unassigned'>('all');
+  const [visibleResultCount, setVisibleResultCount] = useState(30);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -121,6 +122,10 @@ const MonitoringPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setVisibleResultCount(30);
+  }, [resultClientFilter, tab]);
 
   // 실행 중인 결과 자동 새로고침 (무한 루프 방지: boolean 의존성)
   const hasRunning = results.some((r) => r.status === "RUNNING" || r.status === "PENDING");
@@ -731,7 +736,7 @@ const MonitoringPage = () => {
                 </p>
               </div>
             )}
-            {filteredResults.map((r) => {
+            {filteredResults.slice(0, visibleResultCount).map((r) => {
               const tpl = templates.find((t) => t.id === r.templateId);
               return (
                 <div
@@ -809,6 +814,18 @@ const MonitoringPage = () => {
                 </div>
               );
             })}
+            
+            {/* 더보기 버튼 */}
+            {visibleResultCount < filteredResults.length && (
+              <div className="pt-4 pb-2 flex justify-center">
+                <button
+                  onClick={() => setVisibleResultCount(prev => prev + 30)}
+                  className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-bold shadow-sm hover:shadow-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700"
+                >
+                  30개 더보기 ({visibleResultCount} / {filteredResults.length})
+                </button>
+              </div>
+            )}
           </div>
           );
         })()}
