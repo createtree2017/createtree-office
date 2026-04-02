@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import ManualEditor from '../components/ManualEditor';
 import CreateManualModal from '../components/CreateManualModal';
@@ -38,19 +39,26 @@ const ManualsPage = () => {
 
     const getToken = () => localStorage.getItem('token');
 
-    const fetchManuals = async () => {
-        try {
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
+
+    const { data: manualsData = [] } = useQuery({
+        queryKey: ['manuals'],
+        queryFn: async () => {
             const response = await fetch('/api/manuals', {
                 headers: { 'Authorization': `Bearer ${getToken()}` }
             });
             const result = await response.json();
-            if (result.success) {
-                setManuals(result.data);
-            }
-        } catch (err) {
-            toast.error('목록을 불러오지 못했습니다.');
-        }
-    };
+            return result.success ? result.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { setManuals(manualsData); }, [manualsData]);
+
+    // fetchManuals 대체 래퍼
+    const fetchManuals = () => queryClient.invalidateQueries({ queryKey: ['manuals'] });
 
     const fetchDetail = async (manualId: string) => {
         setLoading(true);
@@ -69,9 +77,7 @@ const ManualsPage = () => {
         }
     };
 
-    useEffect(() => {
-        fetchManuals();
-    }, []);
+
 
     useEffect(() => {
         if (id) {

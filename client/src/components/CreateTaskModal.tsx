@@ -1,22 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useModal } from '../contexts/ModalContext';
+import { useClients } from '../hooks/useClients';
+import { useTemplates } from '../hooks/useTemplates';
+import { useUsers } from '../hooks/useUsers';
 import toast from 'react-hot-toast';
-
-interface User {
-    id: number;
-    name: string;
-    role: string;
-}
-
-interface Client {
-    id: number;
-    name: string;
-}
-
-interface Template {
-    id: number;
-    title: string;
-}
 
 interface CreateTaskModalProps {
     onSuccess: () => void;
@@ -25,9 +13,10 @@ interface CreateTaskModalProps {
 
 const CreateTaskModal = ({ onSuccess, initialData }: CreateTaskModalProps) => {
     const { closeModal } = useModal();
-    const [users, setUsers] = useState<User[]>([]);
-    const [clients, setClients] = useState<Client[]>([]);
-    const [templates, setTemplates] = useState<Template[]>([]);
+    const queryClient = useQueryClient();
+    const { data: users = [] } = useUsers();
+    const { data: clients = [] } = useClients();
+    const { data: templates = [] } = useTemplates();
 
     const [templateId, setTemplateId] = useState<number | ''>(initialData?.templateId || '');
     const [clientId, setClientId] = useState<number | ''>(initialData?.clientId || '');
@@ -38,33 +27,6 @@ const CreateTaskModal = ({ onSuccess, initialData }: CreateTaskModalProps) => {
     const [dueDate, setDueDate] = useState(initialData?.dueDate ? initialData.dueDate.slice(0, 10) : '');
     const [assigneeId, setAssigneeId] = useState<number | string>(initialData?.assigneeId || '');
     const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const headers = { 'Authorization': `Bearer ${localStorage.getItem('token')}` };
-                // 직원 목록
-                const userRes = await fetch('/api/auth/users', { headers });
-                const userData = await userRes.json();
-                if (userData.success) setUsers(userData.data);
-
-                // 거래처(병원) 목록
-                const clientRes = await fetch('/api/clients', { headers });
-                const clientData = await clientRes.json();
-                if (clientData.success) setClients(clientData.data);
-
-                // 템플릿 목록
-                const tplRes = await fetch('/api/templates', { headers });
-                if (tplRes.ok) {
-                    const tplData = await tplRes.json();
-                    setTemplates(tplData);
-                }
-            } catch (err) {
-                toast.error('초기 데이터를 불러오지 못했습니다.');
-            }
-        };
-        fetchData();
-    }, []);
 
     // 템플릿 선택 시 제목 자동 입력
     const handleTemplateChange = (id: string) => {
@@ -110,6 +72,7 @@ const CreateTaskModal = ({ onSuccess, initialData }: CreateTaskModalProps) => {
             if (response.ok && (result.success || !result.message)) {
                 toast.success(initialData ? '업무가 수정되었습니다.' :
                     templateId ? '템플릿 업무 및 드라이브 폴더가 정상 생성되었습니다.' : '업무가 할당되었습니다.');
+                queryClient.invalidateQueries({ queryKey: ['tasks'] });
                 onSuccess();
                 closeModal();
             } else {
@@ -176,17 +139,15 @@ const CreateTaskModal = ({ onSuccess, initialData }: CreateTaskModalProps) => {
                     />
                 </div>
 
-                {!templateId && (
-                    <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-1">상세 설명 (선택)</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none"
-                            placeholder="업무에 대한 상세 내용을 입력하세요"
-                        />
-                    </div>
-                )}
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">요약 설명 (선택)</label>
+                    <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none"
+                        placeholder="업무에 대한 요약 내용을 입력하세요"
+                    />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>

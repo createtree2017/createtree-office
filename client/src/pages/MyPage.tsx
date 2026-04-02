@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, Shield, LogOut, Key, ArrowLeft, FileText, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -32,18 +33,20 @@ const MyPage = () => {
     const [showQuotations, setShowQuotations] = useState(false);
     const [showContracts, setShowContracts] = useState(false);
 
-    useEffect(() => {
-        const fetchMyStatus = async () => {
-            try {
-                const res = await fetch('/api/contracts/my/status', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                });
-                const data = await res.json();
-                if (data.success) setMyData(data.data);
-            } catch { /* ignore */ }
-        };
-        fetchMyStatus();
-    }, []);
+    // === TanStack Query 기반 계약 현황 페칭 ===
+    const { data: myStatusData } = useQuery({
+        queryKey: ['my-status'],
+        queryFn: async () => {
+            const res = await fetch('/api/contracts/my/status', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            });
+            const data = await res.json();
+            return data.success ? data.data : null;
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+
+    useEffect(() => { if (myStatusData) setMyData(myStatusData); }, [myStatusData]);
 
     const handleLogout = () => {
         localStorage.removeItem('token');

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Play, Pencil, RefreshCw, Square, LayoutTemplate } from 'lucide-react';
 import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
@@ -70,26 +71,56 @@ const TemplatesPage: React.FC = () => {
     const [editingMonTemplate, setEditingMonTemplate] = useState<MonitoringTemplate | null>(null);
     const [monClientFilter, setMonClientFilter] = useState<number | 'all' | 'unassigned'>('all');
 
-    // ===== 업무 템플릿 로직 =====
-    useEffect(() => {
-        if (activeTab === 'task') fetchTemplates();
-        else fetchMonitoringData();
-    }, [activeTab]);
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
 
-    const fetchTemplates = async () => {
-        try {
-            setLoading(true);
+    // 업무 템플릿
+    const { data: taskTemplatesData = [], isLoading: taskTplLoading } = useQuery({
+        queryKey: ['templates'],
+        queryFn: async () => {
             const res = await fetch('/api/templates', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
+            return res.json();
+        },
+        staleTime: 5 * 60 * 1000,
+        enabled: activeTab === 'task',
+    });
+
+    // 모니터링 템플릿
+    const { data: monTemplatesData = [], isLoading: monTplLoading } = useQuery({
+        queryKey: ['monitoring-templates'],
+        queryFn: async () => {
+            const res = await fetch(`${MAPI}/templates`, { headers: getHeaders() });
             const data = await res.json();
-            setTemplates(data);
-        } catch (error) {
-            toast.error('템플릿을 불러오는데 실패했습니다.');
-        } finally {
-            setLoading(false);
-        }
+            return data.success ? data.data : [];
+        },
+        staleTime: 30 * 1000,
+        enabled: activeTab === 'monitoring',
+    });
+
+    // 거래처 (모니터링 탭에서 사용)
+    const { data: monClientsData = [] } = useQuery({
+        queryKey: ['clients'],
+        queryFn: async () => {
+            const res = await fetch('/api/clients', { headers: getHeaders() });
+            const data = await res.json();
+            return data.success ? data.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+        enabled: activeTab === 'monitoring',
+    });
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { setTemplates(taskTemplatesData); setLoading(taskTplLoading); }, [taskTemplatesData, taskTplLoading]);
+    useEffect(() => { setMonTemplates(monTemplatesData); }, [monTemplatesData]);
+    useEffect(() => { setMonClients(monClientsData); setMonLoading(monTplLoading); }, [monClientsData, monTplLoading]);
+
+    // fetchTemplates / fetchMonitoringData 대체 래퍼
+    const fetchTemplates = () => {
+        queryClient.invalidateQueries({ queryKey: ['templates'] });
     };
+
 
     const handleCreateNew = () => {
         setIsEditing(true);
@@ -245,22 +276,11 @@ const TemplatesPage: React.FC = () => {
     };
 
     // ===== 모니터링 템플릿 로직 =====
-    const fetchMonitoringData = useCallback(async () => {
-        setMonLoading(true);
-        try {
-            const [tRes, cRes] = await Promise.all([
-                fetch(`${MAPI}/templates`, { headers: getHeaders() }),
-                fetch("/api/clients", { headers: getHeaders() }),
-            ]);
-            const tData = await tRes.json();
-            const cData = await cRes.json();
-            if (tData.success) setMonTemplates(tData.data);
-            if (cData.success) setMonClients(cData.data);
-        } catch {
-            toast.error("모니터링 데이터 로드 실패");
-        }
-        setMonLoading(false);
-    }, []);
+    const fetchMonitoringData = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['monitoring-templates'] });
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+    }, [queryClient]);
+
 
     const deleteMonTemplate = async (id: number) => {
         if (!confirm("이 모니터링 템플릿을 삭제하시겠습니까?\n(기존 모니터링 결과물은 보존됩니다)")) return;

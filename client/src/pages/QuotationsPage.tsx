@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Save, ArrowLeft, Trash2, ChevronRight, ChevronLeft, Check, Search, Download } from 'lucide-react';
@@ -38,7 +39,6 @@ const QuotationsPage: React.FC = () => {
     const [searchParams] = useSearchParams();
 
     const [quotations, setQuotations] = useState<Quotation[]>([]);
-    const [loading, setLoading] = useState(false);
     const [view, setView] = useState<'list' | 'edit' | 'detail'>('list');
     const [editId, setEditId] = useState<number | null>(null);
     const [step, setStep] = useState(1); // 1~4 단계
@@ -63,34 +63,69 @@ const QuotationsPage: React.FC = () => {
     const [policies, setPolicies] = useState<DiscountPolicy[]>([]);
     const [detailQuotation, setDetailQuotation] = useState<Quotation | null>(null);
 
-    // 데이터 로드
-    const fetchAll = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [qRes, cRes, sRes, pRes] = await Promise.all([
-                fetch(API_Q, { headers: hdrs() }), fetch(API_C, { headers: hdrs() }),
-                fetch(API_S, { headers: hdrs() }), fetch(`${API_S}/discount-policies`, { headers: hdrs() }),
-            ]);
-            const [qd, cd, sd, pd] = await Promise.all([qRes.json(), cRes.json(), sRes.json(), pRes.json()]);
-            if (qd.success) setQuotations(qd.data);
-            if (cd.success) setClients(cd.data);
-            else if (Array.isArray(cd)) setClients(cd);
-            if (sd.success) setServices(sd.data.filter((s: Service) => s.isActive));
-            if (pd.success) setPolicies(pd.data.filter((p: DiscountPolicy) => p.isActive));
-        } catch { toast.error('데이터 로드 실패'); }
-        setLoading(false);
-    }, []);
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
 
-    // 초기 로드: viewId가 있으면 상세 1건만 fetch, 없으면 전체 목록 로드
+    const { data: quotationsData, isLoading: qLoading } = useQuery({
+        queryKey: ['quotations'],
+        queryFn: async () => {
+            const res = await fetch(API_Q, { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data : [];
+        },
+        staleTime: 60 * 1000,
+    });
+    const { data: clientsData } = useQuery({
+        queryKey: ['clients'],
+        queryFn: async () => {
+            const res = await fetch(API_C, { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data : (Array.isArray(data) ? data : []);
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+    const { data: servicesData } = useQuery({
+        queryKey: ['services'],
+        queryFn: async () => {
+            const res = await fetch(API_S, { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data.filter((s: Service) => s.isActive) : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+    const { data: policiesData } = useQuery({
+        queryKey: ['discount-policies'],
+        queryFn: async () => {
+            const res = await fetch(`${API_S}/discount-policies`, { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data.filter((p: DiscountPolicy) => p.isActive) : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const loading = qLoading;
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { if (quotationsData) setQuotations(quotationsData); }, [quotationsData]);
+    useEffect(() => { if (clientsData) setClients(clientsData); }, [clientsData]);
+    useEffect(() => { if (servicesData) setServices(servicesData); }, [servicesData]);
+    useEffect(() => { if (policiesData) setPolicies(policiesData); }, [policiesData]);
+
+    // fetchAll 대체 래퍼
+    const fetchAll = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['quotations'] });
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+        queryClient.invalidateQueries({ queryKey: ['services'] });
+        queryClient.invalidateQueries({ queryKey: ['discount-policies'] });
+    }, [queryClient]);
+
+    // 초기 로드: viewId가 있으면 상세 1건만 fetch
     useEffect(() => {
         const vid = searchParams.get('viewId');
         if (vid) {
-            // 바로 상세 API 1건만 호출 (전체 목록 로드 생략)
             handleDetail(parseInt(vid));
-        } else {
-            fetchAll();
         }
-    }, [fetchAll]);
+    }, []);
 
     // 새 견적 시작
     const handleNew = () => {
