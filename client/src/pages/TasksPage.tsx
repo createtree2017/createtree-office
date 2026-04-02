@@ -89,19 +89,17 @@ const isSameLocalDate = (a: Date, b: Date): boolean =>
 const TasksPage = () => {
     const queryClient = useQueryClient();
     const { data: tasksRaw = [], isLoading: loading } = useTasks();
-    const [tasks, setTasks] = useState<Task[]>([]);
     const [view, setView] = useState<'list' | 'calendar'>('list');
     const [selectedClientId, setSelectedClientId] = useState<number | 'ALL'>('ALL');
     const { openModal } = useModal();
 
-    // 캐시 데이터 → 로컬 state 동기화 (드래그앤드롭 옵티미스틱 업데이트 지원)
-    useEffect(() => {
-        const processed = tasksRaw.map((t: any) => ({
+    // React Query 캐시를 기반으로 tasks 계산 (불필요한 동기화 제거)
+    const tasks = React.useMemo(() => {
+        return tasksRaw.map((t: any) => ({
             ...t,
             clientId: t.clientId || 0,
             clientName: t.clientName || '내부업무'
         }));
-        setTasks(processed);
     }, [tasksRaw]);
 
     // 기존 fetchTasks 대체 — 캐시 무효화로 자동 리페치
@@ -121,7 +119,9 @@ const TasksPage = () => {
         }
         return acc;
     }, {} as Record<number, { id: number; name: string; count: number }>);
-    const activeClients = Object.values(clientAgg).sort((a, b) => {
+    
+    type ClientAggItem = { id: number; name: string; count: number };
+    const activeClients = (Object.values(clientAgg) as ClientAggItem[]).sort((a, b) => {
         if (a.id === 0) return -1;
         if (b.id === 0) return 1;
         return a.name.localeCompare(b.name, 'ko-KR');
@@ -146,17 +146,18 @@ const TasksPage = () => {
         const taskId = parseInt(draggableId);
         const newStatus = destination.droppableId as Task['status'];
         const oldStatus = source.droppableId as Task['status'];
-        const previousTasks = [...tasks];
+        const previousTasksRaw = queryClient.getQueryData<Task[]>(['tasks']) || [];
 
-        // 1. 컬럼 분리 및 순서 정렬
-        const newTasks = [...tasks];
-        const sourceColumnTasks = newTasks
+        // 1. 캐시 원본을 불변 복사 (객체의 내부 속성도 복사하여 부작용 방지)
+        let updatedTasksRaw = previousTasksRaw.map(t => ({...t}));
+
+        const sourceColumnTasks = updatedTasksRaw
             .filter(t => t.status === oldStatus)
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
         
         let destColumnTasks = oldStatus === newStatus 
             ? sourceColumnTasks 
-            : newTasks.filter(t => t.status === newStatus).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            : updatedTasksRaw.filter(t => t.status === newStatus).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
         // 2. 업무 이동 (제거 후 삽입)
         const [movedTask] = sourceColumnTasks.splice(source.index, 1);
@@ -173,19 +174,19 @@ const TasksPage = () => {
         
         destColumnTasks.forEach((t, i) => {
             t.sortOrder = i;
-            updates.push({ id: t.id, status: t.status, sortOrder: i });
+            updates.push({ id: t.id, status: t.status as Task['status'], sortOrder: i });
         });
 
-        // 메인 배열 상태 업데이트 (Optimistic Update)
-        const finalTasks = newTasks.map(t => {
+        // 메인 배열 상태 업데이트 (React Query 캐시 직접 조작)
+        const finalTasksRaw = updatedTasksRaw.map(t => {
             if (t.id === taskId) return movedTask;
             const updatedInDest = destColumnTasks.find(d => d.id === t.id);
             if (updatedInDest) return updatedInDest;
             return t;
         });
         
-        // 리렌더링 버그 방지를 위해 새로운 배열로 세팅하며 sort() 적용은 렌더링 측에서 처리됨
-        setTasks(finalTasks);
+        // Optimistic Update: 즉시 화면 갱신
+        queryClient.setQueryData(['tasks'], finalTasksRaw);
 
         try {
             const response = await fetch('/api/tasks/reorder', {
@@ -196,11 +197,14 @@ const TasksPage = () => {
             const resData = await response.json();
             if (!resData.success) {
                 toast.error(resData.message || '상태 변경 권한이 없습니다.');
-                setTasks(previousTasks);
+                queryClient.setQueryData(['tasks'], previousTasksRaw);
             }
         } catch {
+            queryClient.setQueryData(['tasks'], previousTasksRaw);
             toast.error('순서 변경 중 네트워크 오류가 발생했습니다.');
-            setTasks(previousTasks);
+        } finally {
+            // 통신 완료 후 무조건 캐시 무효화로 정확한 순서 보장
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
         }
     };
 
@@ -369,8 +373,10 @@ const TasksPage = () => {
         // KST 기준 해당 날짜 23:59:59로 저장
         const dateStr = toLocalDateStr(newDate);
         const formattedDate = `${dateStr}T23:59:59+09:00`;
-        const previousTasks = [...tasks];
-        setTasks(tasks.map(t => t.id === taskId ? { ...t, dueDate: formattedDate } : t));
+        const previousTasksRaw = queryClient.getQueryData<Task[]>(['tasks']) || [];
+        const finalTasksRaw = previousTasksRaw.map(t => t.id === taskId ? { ...t, dueDate: formattedDate } : t);
+        
+        queryClient.setQueryData(['tasks'], finalTasksRaw);
 
         try {
             const response = await fetch(`/api/tasks/${taskId}`, {
@@ -379,9 +385,18 @@ const TasksPage = () => {
                 body: JSON.stringify({ dueDate: formattedDate }),
             });
             const resData = await response.json();
-            if (!resData.success) { toast.error('수정 권한이 없습니다.'); setTasks(previousTasks); }
-            else toast.success('마감일이 변경되었습니다.');
-        } catch { toast.error('오류가 발생했습니다.'); setTasks(previousTasks); }
+            if (!resData.success) { 
+                toast.error('수정 권한이 없습니다.'); 
+                queryClient.setQueryData(['tasks'], previousTasksRaw); 
+            } else {
+                toast.success('마감일이 변경되었습니다.');
+            }
+        } catch { 
+            toast.error('오류가 발생했습니다.'); 
+            queryClient.setQueryData(['tasks'], previousTasksRaw); 
+        } finally {
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        }
     };
 
     const handleCalendarDayClick = (date: Date) => {
@@ -409,7 +424,8 @@ const TasksPage = () => {
                                         className={`flex flex-col gap-1.5 mt-1 w-full min-h-[50px] rounded-lg p-1 transition-all ${snapshot.isDraggingOver ? 'bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-400/40' : ''}`}
                                     >
                                         {dayTasks.map((t, index) => {
-                                            const cfg = STATUS_CONFIG[t.status];
+                                            const cfg = STATUS_CONFIG[t.status as keyof typeof STATUS_CONFIG];
+                                            if (!cfg) return null;
                                             return (
                                                 <Draggable key={`cal_task_${t.id}`} draggableId={t.id.toString()} index={index}>
                                                     {(provided, snapshot) => (
