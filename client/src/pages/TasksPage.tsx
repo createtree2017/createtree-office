@@ -146,65 +146,78 @@ const TasksPage = () => {
         const taskId = parseInt(draggableId);
         const newStatus = destination.droppableId as Task['status'];
         const oldStatus = source.droppableId as Task['status'];
+        const isSameColumn = oldStatus === newStatus;
         const previousTasksRaw = queryClient.getQueryData<Task[]>(['tasks']) || [];
 
         // 1. 캐시 원본을 불변 복사 (객체의 내부 속성도 복사하여 부작용 방지)
-        let updatedTasksRaw = previousTasksRaw.map(t => ({...t}));
+        const updatedTasksRaw = previousTasksRaw.map(t => ({ ...t }));
 
         const sourceColumnTasks = updatedTasksRaw
             .filter(t => t.status === oldStatus)
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-        
-        let destColumnTasks = oldStatus === newStatus 
-            ? sourceColumnTasks 
-            : updatedTasksRaw.filter(t => t.status === newStatus).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+        // 같은 컬럼이면 동일 배열 참조, 다른 컬럼이면 별도 배열
+        const destColumnTasks = isSameColumn
+            ? sourceColumnTasks
+            : updatedTasksRaw
+                .filter(t => t.status === newStatus)
+                .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
         // 2. 업무 이동 (제거 후 삽입)
         const [movedTask] = sourceColumnTasks.splice(source.index, 1);
         movedTask.status = newStatus;
+        destColumnTasks.splice(destination.index, 0, movedTask);
 
-        if (oldStatus === newStatus) {
-            sourceColumnTasks.splice(destination.index, 0, movedTask);
-        } else {
-            destColumnTasks.splice(destination.index, 0, movedTask);
-        }
-
-        // 3. 도착 컬럼의 새 순서 부여 및 API 페이로드(업데이트 목록) 생성
-        const updates: { id: number, status: Task['status'], sortOrder: number }[] = [];
-        
+        // 3. 도착 컬럼 전체의 sortOrder 재부여 및 API 페이로드 생성
+        const updates: { id: number; status: Task['status']; sortOrder: number }[] = [];
         destColumnTasks.forEach((t, i) => {
             t.sortOrder = i;
             updates.push({ id: t.id, status: t.status as Task['status'], sortOrder: i });
         });
+        // 컬럼 간 이동 시 출발 컬럼도 sortOrder 재정렬
+        if (!isSameColumn) {
+            sourceColumnTasks.forEach((t, i) => {
+                t.sortOrder = i;
+                updates.push({ id: t.id, status: t.status as Task['status'], sortOrder: i });
+            });
+        }
 
-        // 메인 배열 상태 업데이트 (React Query 캐시 직접 조작)
-        const finalTasksRaw = updatedTasksRaw.map(t => {
-            if (t.id === taskId) return movedTask;
-            const updatedInDest = destColumnTasks.find(d => d.id === t.id);
-            if (updatedInDest) return updatedInDest;
-            return t;
-        });
-        
-        // Optimistic Update: 즉시 화면 갱신
+        // 4. 변경된 카드들로 캐시 전체 갱신 (불변 교체)
+        //    — 같은 컬럼 이동 시 sourceColumnTasks === destColumnTasks 이므로
+        //      affected ID 셋을 기준으로 교체
+        const affectedIds = new Set(updates.map(u => u.id));
+        const allAffected = [...destColumnTasks, ...(isSameColumn ? [] : sourceColumnTasks)];
+        const affectedMap = new Map(allAffected.map(t => [t.id, t]));
+
+        const finalTasksRaw = updatedTasksRaw.map(t =>
+            affectedIds.has(t.id) ? affectedMap.get(t.id)! : t
+        );
+
+        // Optimistic Update: 즉시 화면 갱신 — refetch 없이 캐시만 교체
         queryClient.setQueryData(['tasks'], finalTasksRaw);
 
         try {
             const response = await fetch('/api/tasks/reorder', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                },
                 body: JSON.stringify({ updates }),
             });
             const resData = await response.json();
             if (!resData.success) {
+                // 실패 시 롤백 + 서버 최신 상태 동기화
                 toast.error(resData.message || '상태 변경 권한이 없습니다.');
                 queryClient.setQueryData(['tasks'], previousTasksRaw);
+                queryClient.invalidateQueries({ queryKey: ['tasks'] });
             }
+            // 성공 시: invalidate 하지 않음 — 낙관적 업데이트 유지로 Jitter 방지
         } catch {
+            // 네트워크 오류 시 롤백 + 서버 동기화
             queryClient.setQueryData(['tasks'], previousTasksRaw);
-            toast.error('순서 변경 중 네트워크 오류가 발생했습니다.');
-        } finally {
-            // 통신 완료 후 무조건 캐시 무효화로 정확한 순서 보장
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            toast.error('순서 변경 중 네트워크 오류가 발생했습니다.');
         }
     };
 
@@ -252,7 +265,7 @@ const TasksPage = () => {
                                         <div
                                             ref={provided.innerRef}
                                             {...provided.droppableProps}
-                                            className={`flex flex-col gap-3 min-h-[480px] p-2 rounded-2xl transition-all duration-300 ${snapshot.isDraggingOver ? cfg.dropOverClass : 'bg-slate-100/50 dark:bg-slate-800/20 border border-dashed border-slate-300 dark:border-slate-700'}`}
+                                            className={`flex flex-col gap-3 min-h-[480px] p-2 rounded-2xl transition-[background-color,border-color,box-shadow,ring-color] duration-300 ${snapshot.isDraggingOver ? cfg.dropOverClass : 'bg-slate-100/50 dark:bg-slate-800/20 border border-dashed border-slate-300 dark:border-slate-700'}`}
                                         >
                                             {visibleColumnTasks.map((task, index) => (
                                                 <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
@@ -262,7 +275,7 @@ const TasksPage = () => {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                             onClick={() => handleTaskClick(task)}
-                                                            className={`group cursor-pointer rounded-xl p-4 transition-all duration-200
+                                                            className={`group cursor-pointer rounded-xl p-4 transition-[border-color,box-shadow,background-color] duration-200
                                                                 border-2 bg-white dark:bg-[hsl(var(--card))]
                                                                 ${snapshot.isDragging
                                                                     ? 'border-blue-500 shadow-2xl shadow-blue-500/20 scale-[1.03] z-50'
@@ -374,27 +387,35 @@ const TasksPage = () => {
         const dateStr = toLocalDateStr(newDate);
         const formattedDate = `${dateStr}T23:59:59+09:00`;
         const previousTasksRaw = queryClient.getQueryData<Task[]>(['tasks']) || [];
-        const finalTasksRaw = previousTasksRaw.map(t => t.id === taskId ? { ...t, dueDate: formattedDate } : t);
-        
+        const finalTasksRaw = previousTasksRaw.map(t =>
+            t.id === taskId ? { ...t, dueDate: formattedDate } : t
+        );
+
+        // Optimistic Update: 즉시 화면 갱신
         queryClient.setQueryData(['tasks'], finalTasksRaw);
 
         try {
             const response = await fetch(`/api/tasks/${taskId}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                },
                 body: JSON.stringify({ dueDate: formattedDate }),
             });
             const resData = await response.json();
-            if (!resData.success) { 
-                toast.error('수정 권한이 없습니다.'); 
-                queryClient.setQueryData(['tasks'], previousTasksRaw); 
+            if (!resData.success) {
+                // 실패 시 롤백 + 서버 동기화
+                toast.error('수정 권한이 없습니다.');
+                queryClient.setQueryData(['tasks'], previousTasksRaw);
+                queryClient.invalidateQueries({ queryKey: ['tasks'] });
             } else {
                 toast.success('마감일이 변경되었습니다.');
+                // 성공 시: invalidate 하지 않음 — 낙관적 업데이트 유지로 Jitter 방지
             }
-        } catch { 
-            toast.error('오류가 발생했습니다.'); 
-            queryClient.setQueryData(['tasks'], previousTasksRaw); 
-        } finally {
+        } catch {
+            toast.error('오류가 발생했습니다.');
+            queryClient.setQueryData(['tasks'], previousTasksRaw);
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
         }
     };
@@ -421,7 +442,7 @@ const TasksPage = () => {
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex flex-col gap-1.5 mt-1 w-full min-h-[50px] rounded-lg p-1 transition-all ${snapshot.isDraggingOver ? 'bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-400/40' : ''}`}
+                                        className={`flex flex-col gap-1.5 mt-1 w-full min-h-[50px] rounded-lg p-1 transition-[background-color,ring-color] ${snapshot.isDraggingOver ? 'bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-400/40' : ''}`}
                                     >
                                         {dayTasks.map((t, index) => {
                                             const cfg = STATUS_CONFIG[t.status as keyof typeof STATUS_CONFIG];
@@ -434,7 +455,7 @@ const TasksPage = () => {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                             onClick={(e) => { e.stopPropagation(); handleTaskClick(t); }}
-                                                            className={`text-[10px] font-bold px-2 py-1 rounded-md select-none cursor-pointer truncate transition-all border
+                                                            className={`text-[10px] font-bold px-2 py-1 rounded-md select-none cursor-pointer truncate transition-[border-color,box-shadow,background-color] border
                                                             ${snapshot.isDragging
                                                                     ? cfg.calendarDragClass
                                                                     : cfg.calendarClass

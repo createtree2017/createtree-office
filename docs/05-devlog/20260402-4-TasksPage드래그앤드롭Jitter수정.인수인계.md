@@ -1,4 +1,4 @@
-# Docs/05-devlog: TasksPage 드래그 앤 드롭 UI Jitter 수정
+# Docs/05-devlog: TasksPage 드래그 앤 드롭 UI Jitter 수정 (2차)
 
 ## 1. 작업 개요
 *   **시작일/완료일**: 2026-04-02
@@ -27,5 +27,41 @@
 *   [x] 캘린더 View 드래그 앤 드롭 시 `queryClient.setQueryData` 및 무효화 적용 검증 
 
 ## 5. 다음 작업 참고사항
-- 이전에 설정한 전역 캐싱 시스템(`useTasks`의 `staleTime: 30초`)은 전혀 손상되지 않았으며, 오히려 낙관적 업데이트와 정확히 연동되면서 서버 의존성을 유지할 수 있게 되었습니다. 
+- 이전에 설정한 전역 캐싱 시스템(`useTasks`의 `staleTime: 30초`)은 전혀 손상되지 않았으며, 오히려 낙관적 업데이트와 정확히 연동되면서 서버 의존성을 유지할 수 있게 되었습니다.
 - 향후 드래그 앤 드롭 관련하여 API 통신 전 로컬 업데이트를 수행할 때는, 꼭 `useState`가 아닌 `setQueryData`를 사용하고 객체 깊은 복사(`{...obj}`)를 준수해주십시오.
+
+---
+
+## 6. [추가] 2차 수정 (2026-04-02 야간)
+
+### 잔존 Jitter 원인 3가지 추가 분석
+
+| # | 원인 | 심각도 |
+|---|------|--------|
+| 1 | `finally`의 `invalidateQueries` — 성공 시에도 무조건 서버 refetch 발동 → 낙관적 업데이트를 덮어씀 | 🚨 주 원인 |
+| 2 | 같은 컬럼 내 순서 변경 시 `finalTasksRaw` 매핑이 `movedTask.id`만 체크해 다른 카드의 sortOrder 업데이트 누락 | ⚠️ 보조 원인 |
+| 3 | 컬럼 간 이동 시 출발 컬럼 카드들의 `sortOrder`가 API `updates` 페이로드에 미포함 → 서버 DB 순서와 클라이언트 상태 불일치 | ⚠️ 보조 원인 |
+
+### 2차 수정 내용 (`client/src/pages/TasksPage.tsx`)
+
+1. **`invalidateQueries` 조건화**: 성공 시 `invalidateQueries` 완전 제거 → 낙관적 업데이트 영구 유지. 실패/오류 시에만 롤백 + `invalidateQueries` 호출
+2. **`finalTasksRaw` 업데이트 로직 교체**: `affectedIds Set` + `affectedMap Map` 방식으로 영향받은 모든 카드를 빠짐없이 반영
+3. **출발 컬럼 `sortOrder` API 페이로드 포함**: 컬럼 간 이동 시 `sourceColumnTasks`도 재정렬 후 `updates`에 추가
+4. **`onCalendarDragEnd`도 동일 패턴 적용**: 성공 시 invalidate 제거, 실패/오류 시에만 invalidate
+
+### 낙관적 업데이트 최종 패턴 (정착)
+
+```
+드래그 완료
+  → setQueryData (즉시 화면 반영, refetch 없음)
+  → API 호출
+    ├─ 성공: 아무것도 하지 않음 (낙관적 업데이트 유지)
+    └─ 실패/오류: setQueryData(이전값) + invalidateQueries (서버 동기화)
+```
+
+## 4. 동작 확인 상태 (업데이트)
+
+- [x] TypeScript Strict Mode 컴파일 통과 (에러 0)
+- [x] 1차 수정 동작 유지 (useState/useEffect 제거)
+- [ ] 칸반 드래그 Jitter 해소 확인 (브라우저 테스트 필요)
+- [ ] 캘린더 드래그 Jitter 해소 확인 (브라우저 테스트 필요)
