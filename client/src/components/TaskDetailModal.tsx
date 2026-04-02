@@ -133,9 +133,9 @@ const TaskDetailModal = ({ task, onSuccess }: TaskDetailModalProps) => {
                 </div>
 
                 <div className="mb-12">
-                    <h3 className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-[0.2em] mb-4 ml-1">상세 내용</h3>
+                    <h3 className="text-slate-400 dark:text-slate-500 text-[11px] font-bold uppercase tracking-[0.2em] mb-4 ml-1">요약 내용</h3>
                     <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700/50 p-8 rounded-2xl text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap min-h-[160px] text-[15px] font-medium">
-                        {task.description || "상세 설명이 없습니다."}
+                        {task.description || "요약 설명이 없습니다."}
                     </div>
                 </div>
 

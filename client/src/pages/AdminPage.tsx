@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
@@ -62,7 +63,6 @@ const AdminPage = () => {
     const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
-    const [loading, setLoading] = useState(true);
     const [newClientName, setNewClientName] = useState('');
     const [creatingClient, setCreatingClient] = useState(false);
     const [syncingClients, setSyncingClients] = useState(false);
@@ -98,41 +98,34 @@ const AdminPage = () => {
     // ===== 활성 계약 서비스 상품 상태 =====
     const [activeServicesMap, setActiveServicesMap] = useState<Record<number, { contractNumber: string; services: { serviceName: string; items: any[] }[] } | null>>({});
 
-    // ===== API 호출 =====
-    const fetchUsers = async () => {
-        try {
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
+
+    const { data: usersData = [], isLoading: usersLoading } = useQuery({
+        queryKey: ['admin-users'],
+        queryFn: async () => {
             const response = await fetch('/api/admin/users', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
             const result = await response.json();
-            if (result.success) {
-                setUsers(result.data);
-            } else {
-                toast.error(result.message);
-            }
-        } catch (err) {
-            toast.error('사용자 목록을 불러오지 못했습니다.');
-        } finally {
-            setLoading(false);
-        }
-    };
+            if (!result.success) throw new Error(result.message || 'Failed to fetch users');
+            return result.data;
+        },
+        staleTime: 2 * 60 * 1000,
+    });
 
-    const fetchClients = async () => {
-        try {
+    const { data: clientsBundle, isLoading: clientsLoading } = useQuery({
+        queryKey: ['admin-clients'],
+        queryFn: async () => {
             const [clientsRes, servicesRes] = await Promise.all([
                 fetch('/api/clients', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }),
                 fetch('/api/quotations/all-approved-services', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
             ]);
-            
             const clientsResult = await clientsRes.json();
             const servicesResult = await servicesRes.json();
 
-            if (clientsResult.success) {
-                setClients(clientsResult.data);
-            }
-            
+            let servicesMap: Record<number, any> = {};
             if (servicesResult.success && servicesResult.data) {
-                const newServicesMap: Record<number, any> = {};
                 for (const clientId in servicesResult.data) {
                     const servicesList = servicesResult.data[clientId];
                     if (servicesList && servicesList.length > 0) {
@@ -143,15 +136,32 @@ const AdminPage = () => {
                             }
                             svcMap[conf.serviceName].items.push(conf);
                         }
-                        newServicesMap[Number(clientId)] = { contractNumber: '', services: Object.values(svcMap) };
+                        servicesMap[Number(clientId)] = { contractNumber: '', services: Object.values(svcMap) };
                     }
                 }
-                setActiveServicesMap(newServicesMap);
             }
-        } catch (err) {
-            console.error('거래처 목록 및 서비스 데이터 불러오기 실패:', err);
+            return {
+                clients: clientsResult.success ? clientsResult.data : [],
+                servicesMap,
+            };
+        },
+        staleTime: 2 * 60 * 1000,
+    });
+
+    const loading = usersLoading || clientsLoading;
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { setUsers(usersData); }, [usersData]);
+    useEffect(() => {
+        if (clientsBundle) {
+            setClients(clientsBundle.clients);
+            setActiveServicesMap(clientsBundle.servicesMap);
         }
-    };
+    }, [clientsBundle]);
+
+    // fetchUsers / fetchClients 대체 래퍼
+    const fetchUsers = () => queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    const fetchClients = () => queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
 
     // ===== 연결 모달 핸들러 =====
     const openLinkModal = async (type: 'quotation' | 'contract', clientId: number) => {
@@ -379,10 +389,7 @@ const AdminPage = () => {
         }
     };
 
-    useEffect(() => {
-        fetchUsers();
-        fetchClients();
-    }, []);
+
 
     // 회원 정렬
     const sortedUsers = [...users].sort((a, b) => {

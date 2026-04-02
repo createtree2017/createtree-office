@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTasks } from '../hooks/useTasks';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { useModal } from '../contexts/ModalContext';
@@ -85,34 +87,27 @@ const isSameLocalDate = (a: Date, b: Date): boolean =>
     a.getDate() === b.getDate();
 
 const TasksPage = () => {
+    const queryClient = useQueryClient();
+    const { data: tasksRaw = [], isLoading: loading } = useTasks();
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'list' | 'calendar'>('list');
     const [selectedClientId, setSelectedClientId] = useState<number | 'ALL'>('ALL');
     const { openModal } = useModal();
 
-    const fetchTasks = async () => {
-        try {
-            const response = await fetch('/api/tasks', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            const result = await response.json();
-            if (result.success) {
-                const processed = result.data.map((t: any) => ({
-                    ...t,
-                    clientId: t.clientId || 0,
-                    clientName: t.clientName || '내부업무'
-                }));
-                setTasks(processed);
-            }
-        } catch (err) {
-            toast.error('업무 목록을 불러오지 못했습니다.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // 캐시 데이터 → 로컬 state 동기화 (드래그앤드롭 옵티미스틱 업데이트 지원)
+    useEffect(() => {
+        const processed = tasksRaw.map((t: any) => ({
+            ...t,
+            clientId: t.clientId || 0,
+            clientName: t.clientName || '내부업무'
+        }));
+        setTasks(processed);
+    }, [tasksRaw]);
 
-    useEffect(() => { fetchTasks(); }, []);
+    // 기존 fetchTasks 대체 — 캐시 무효화로 자동 리페치
+    const fetchTasks = () => {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    };
 
     // 거래처별 업무 개수 집계 (완료 제외)
     const activeTaskCount = tasks.filter(t => t.status !== 'COMPLETED').length;

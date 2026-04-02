@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft, X, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useDriveFiles } from '../hooks/useDriveFiles';
 
 interface DriveFile {
     id: string;
@@ -14,10 +15,6 @@ interface DriveFile {
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 
 const DrivePage = () => {
-    const [files, setFiles] = useState<DriveFile[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [accessError, setAccessError] = useState<string | null>(null);
-
     // 모달 뷰어 상태
     const [viewerFile, setViewerFile] = useState<DriveFile | null>(null);
 
@@ -42,50 +39,28 @@ const DrivePage = () => {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
+    // === TanStack Query 기반 데이터 페칭 ===
+    const { data: driveFiles, isLoading, error: driveError } = useDriveFiles(currentFolder.id, debouncedSearchQuery);
+    const [files, setFiles] = useState<DriveFile[]>([]);
+    const [accessError, setAccessError] = useState<string | null>(null);
+
+    // 캐시 → 로컬 state 동기화
     useEffect(() => {
-        const fetchFiles = async () => {
-            setIsLoading(true);
+        if (driveFiles) {
+            setFiles(driveFiles as DriveFile[]);
             setAccessError(null);
-            try {
-                const query = debouncedSearchQuery.trim();
-                const url = query
-                    ? `/api/drive/search?q=${encodeURIComponent(query)}&folderId=${currentFolder.id}`
-                    : `/api/drive/folders/${currentFolder.id}`;
+        }
+    }, [driveFiles]);
 
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await response.json();
-
-                if (response.status === 403) {
-                    setAccessError(data.message || '접근 권한이 없습니다.');
-                    setFiles([]);
-                    return;
-                }
-
-                if (data.success) {
-                    // 폴더를 먼저 보여주고 그 다음 파일들을 보여주도록 정렬
-                    const sortedFiles = data.files.sort((a: DriveFile, b: DriveFile) => {
-                        const isAFolder = a.mimeType === FOLDER_MIME_TYPE;
-                        const isBFolder = b.mimeType === FOLDER_MIME_TYPE;
-                        if (isAFolder && !isBFolder) return -1;
-                        if (!isAFolder && isBFolder) return 1;
-                        return 0; // 둘 다 폴더거나 둘 다 파일이면 구글 API의 원래 정렬(최신순 등)을 따름
-                    });
-                    setFiles(sortedFiles);
-                } else {
-                    toast.error(data.message || '파일 목록을 불러오지 못했습니다.');
-                }
-            } catch (error) {
-                console.error('Error fetching drive files:', error);
-                toast.error('서버와의 통신에 실패했습니다.');
-            } finally {
-                setIsLoading(false);
+    useEffect(() => {
+        if (driveError) {
+            const err = driveError as any;
+            if (err?.status === 403) {
+                setAccessError(err.message || '접근 권한이 없습니다.');
+                setFiles([]);
             }
-        };
-
-        fetchFiles();
-    }, [currentFolder.id, debouncedSearchQuery]);
+        }
+    }, [driveError]);
 
     const handleGoBack = () => {
         if (canGoBack) {

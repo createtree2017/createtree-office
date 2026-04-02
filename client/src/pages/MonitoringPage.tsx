@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Plus,
@@ -79,10 +80,10 @@ const MonitoringPage = () => {
   const [tab, setTab] = useState<"dashboard" | "templates" | "results">(
     "dashboard",
   );
+  // === 로컬 state (기존 코드 호환성 유지) ===
   const [templates, setTemplates] = useState<Template[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
@@ -99,29 +100,51 @@ const MonitoringPage = () => {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [tRes, rRes, cRes] = await Promise.all([
-        fetch(`${API}/templates`, { headers: getHeaders() }),
-        fetch(`${API}/results`, { headers: getHeaders() }),
-        fetch("/api/clients", { headers: getHeaders() }),
-      ]);
-      const tData = await tRes.json();
-      const rData = await rRes.json();
-      const cData = await cRes.json();
-      if (tData.success) setTemplates(tData.data);
-      if (rData.success) setResults(rData.data);
-      if (cData.success) setClients(cData.data);
-    } catch {
-      toast.error("데이터 로드 실패");
-    }
-    setLoading(false);
-  }, []);
+  // === TanStack Query 기반 데이터 페칭 ===
+  const queryClient = useQueryClient();
+  const { data: templatesData = [], isLoading: templatesLoading } = useQuery({
+    queryKey: ['monitoring-templates'],
+    queryFn: async () => {
+      const res = await fetch(`${API}/templates`, { headers: getHeaders() });
+      const data = await res.json();
+      if (!data.success) throw new Error('Failed to fetch templates');
+      return data.data as Template[];
+    },
+    staleTime: 30 * 1000,
+  });
+  const { data: resultsData = [], isLoading: resultsLoading } = useQuery({
+    queryKey: ['monitoring-results'],
+    queryFn: async () => {
+      const res = await fetch(`${API}/results`, { headers: getHeaders() });
+      const data = await res.json();
+      if (!data.success) throw new Error('Failed to fetch results');
+      return data.data as Result[];
+    },
+    staleTime: 30 * 1000,
+  });
+  const { data: clientsData = [], isLoading: clientsLoading } = useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      const res = await fetch('/api/clients', { headers: getHeaders() });
+      const data = await res.json();
+      if (!data.success) throw new Error('Failed to fetch clients');
+      return data.data as Client[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const loading = templatesLoading || resultsLoading || clientsLoading;
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // 캠시 데이터 → 로컬 state 동기화 (기존 코드와의 호환성)
+  useEffect(() => { setTemplates(templatesData); }, [templatesData]);
+  useEffect(() => { setResults(resultsData); }, [resultsData]);
+  useEffect(() => { setClients(clientsData); }, [clientsData]);
+
+  // fetchData 대체 — 캐시 무효화로 자동 리페치
+  const fetchData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['monitoring-templates'] });
+    queryClient.invalidateQueries({ queryKey: ['monitoring-results'] });
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+  }, [queryClient]);
 
   useEffect(() => {
     setVisibleResultCount(30);
@@ -131,15 +154,11 @@ const MonitoringPage = () => {
   const hasRunning = results.some((r) => r.status === "RUNNING" || r.status === "PENDING");
   useEffect(() => {
     if (!hasRunning) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API}/results`, { headers: getHeaders() });
-        const data = await res.json();
-        if (data.success) setResults(data.data);
-      } catch { }
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['monitoring-results'] });
     }, 5000);
     return () => clearInterval(interval);
-  }, [hasRunning]);
+  }, [hasRunning, queryClient]);
 
 
 

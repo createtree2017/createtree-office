@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Save, Send, Link as LinkIcon, AlertCircle } from 'lucide-react';
@@ -36,7 +37,6 @@ interface Task {
 const TaskResponsePage: React.FC = () => {
     const { taskId } = useParams<{ taskId: string }>();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
@@ -48,52 +48,50 @@ const TaskResponsePage: React.FC = () => {
     // 뒤로가기 처리를 위한 원본 응답 상태 (변경 여부 추적용)
     const [originalResponses, setOriginalResponses] = useState<string>('');
 
-    useEffect(() => {
-        const fetchTaskAndDraft = async () => {
-            try {
-                const headers = { 'Authorization': `Bearer ${localStorage.getItem('token')}` };
+    // === TanStack Query 기반 데이터 페칭 ===
+    const { data: taskResponseData, isLoading: loading } = useQuery({
+        queryKey: ['task-response', taskId],
+        queryFn: async () => {
+            const headers = { 'Authorization': `Bearer ${localStorage.getItem('token')}` };
 
-                // 1. Task 및 템플릿 정보 가져오기
-                const taskRes = await fetch(`/api/tasks/${taskId}`, { headers });
-                const taskData = await taskRes.json();
+            // 1. Task 및 템플릿 정보 가져오기
+            const taskRes = await fetch(`/api/tasks/${taskId}`, { headers });
+            const taskData = await taskRes.json();
 
-                if (!taskData.success) {
-                    toast.error(taskData.message || '업무를 찾을 수 없습니다.');
-                    navigate('/tasks');
-                    return;
-                }
-
-                if (!taskData.data.template) {
-                    toast.error('이 업무는 템플릿 기반 업무가 아닙니다.');
-                    navigate('/tasks');
-                    return;
-                }
-
-                setTask(taskData.data.task);
-                setTemplate(taskData.data.template);
-
-                // 2. 기존 응답 (Draft/Submitted) 가져오기
-                const responseRes = await fetch(`/api/task-responses/${taskId}`, { headers });
-                const responseData = await responseRes.json();
-
-                if (responseData && responseData.responseData) {
-                    setResponses(responseData.responseData);
-                    setOriginalResponses(JSON.stringify(responseData.responseData));
-                } else {
-                    setOriginalResponses('{}');
-                }
-
-            } catch (error) {
-                toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
-            } finally {
-                setLoading(false);
+            if (!taskData.success) {
+                throw new Error(taskData.message || '업무를 찾을 수 없습니다.');
             }
-        };
 
-        if (taskId) {
-            fetchTaskAndDraft();
+            if (!taskData.data.template) {
+                throw new Error('이 업무는 템플릿 기반 업무가 아닙니다.');
+            }
+
+            // 2. 기존 응답 (Draft/Submitted) 가져오기
+            const responseRes = await fetch(`/api/task-responses/${taskId}`, { headers });
+            const responseData = await responseRes.json();
+
+            return {
+                task: taskData.data.task,
+                template: taskData.data.template,
+                responseData: responseData?.responseData || null,
+            };
+        },
+        enabled: !!taskId,
+        staleTime: 30 * 1000,
+    });
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => {
+        if (!taskResponseData) return;
+        setTask(taskResponseData.task);
+        setTemplate(taskResponseData.template);
+        if (taskResponseData.responseData) {
+            setResponses(taskResponseData.responseData);
+            setOriginalResponses(JSON.stringify(taskResponseData.responseData));
+        } else {
+            setOriginalResponses('{}');
         }
-    }, [taskId, navigate]);
+    }, [taskResponseData]);
 
     const handleInputChange = (questionId: string, value: any) => {
         setResponses(prev => ({

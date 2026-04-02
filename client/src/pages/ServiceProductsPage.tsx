@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
     Package, Plus, Save, ArrowLeft, Trash2, MoveUp, MoveDown,
@@ -33,7 +34,6 @@ const ServiceProductsPage: React.FC = () => {
     const user = userStr ? JSON.parse(userStr) : null;
 
     const [services, setServices] = useState<Service[]>([]);
-    const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [showPolicies, setShowPolicies] = useState(false);
 
@@ -46,26 +46,40 @@ const ServiceProductsPage: React.FC = () => {
     // 할인 정책
     const [policies, setPolicies] = useState<DiscountPolicy[]>([]);
 
-    // ===== 데이터 로드 =====
-    const fetchServices = useCallback(async () => {
-        setLoading(true);
-        try {
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
+
+    const { data: servicesData, isLoading: loading } = useQuery({
+        queryKey: ['services'],
+        queryFn: async () => {
             const res = await fetch(API, { headers: getHeaders() });
             const data = await res.json();
-            if (data.success) setServices(data.data);
-        } catch { toast.error('서비스 목록 로드 실패'); }
-        setLoading(false);
-    }, []);
+            return data.success ? data.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
 
-    const fetchPolicies = useCallback(async () => {
-        try {
+    const { data: policiesData } = useQuery({
+        queryKey: ['discount-policies'],
+        queryFn: async () => {
             const res = await fetch(`${API}/discount-policies`, { headers: getHeaders() });
             const data = await res.json();
-            if (data.success) setPolicies(data.data);
-        } catch { /* ignore */ }
-    }, []);
+            return data.success ? data.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
 
-    useEffect(() => { fetchServices(); fetchPolicies(); }, [fetchServices, fetchPolicies]);
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { if (servicesData) setServices(servicesData); }, [servicesData]);
+    useEffect(() => { if (policiesData) setPolicies(policiesData); }, [policiesData]);
+
+    // fetchServices / fetchPolicies 대체 래퍼
+    const fetchServices = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['services'] });
+    }, [queryClient]);
+    const fetchPolicies = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['discount-policies'] });
+    }, [queryClient]);
 
     // ===== 편집 로직 =====
     const handleNew = () => {

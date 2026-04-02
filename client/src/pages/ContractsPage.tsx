@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileText, ArrowLeft, Calendar, Building2, Download } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -21,7 +22,6 @@ const ContractsPage: React.FC = () => {
     const navigate = useNavigate();
 
     const [contracts, setContracts] = useState<Contract[]>([]);
-    const [loading, setLoading] = useState(false);
     const [view, setView] = useState<'list' | 'detail'>('list');
     const [detail, setDetail] = useState<Contract | null>(null);
     const [editMode, setEditMode] = useState(false);
@@ -45,21 +45,38 @@ const ContractsPage: React.FC = () => {
         if (vid) setAutoViewId(parseInt(vid));
     }, [searchParams]);
 
-    const fetchAll = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [ctRes, clRes] = await Promise.all([
-                fetch(API, { headers: hdrs() }),
-                fetch('/api/clients', { headers: hdrs() }),
-            ]);
-            const [ctData, clData] = await Promise.all([ctRes.json(), clRes.json()]);
-            if (ctData.success) setContracts(ctData.data);
-            if (clData.success) setClients(clData.data);
-        } catch { toast.error('데이터 로드 실패'); }
-        setLoading(false);
-    }, []);
+    // === TanStack Query 기반 데이터 페칭 ===
+    const queryClient = useQueryClient();
 
-    useEffect(() => { fetchAll(); }, [fetchAll]);
+    const { data: contractsData, isLoading: loading } = useQuery({
+        queryKey: ['contracts'],
+        queryFn: async () => {
+            const res = await fetch(API, { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data : [];
+        },
+        staleTime: 60 * 1000,
+    });
+    const { data: clientsData } = useQuery({
+        queryKey: ['clients'],
+        queryFn: async () => {
+            const res = await fetch('/api/clients', { headers: hdrs() });
+            const data = await res.json();
+            return data.success ? data.data : [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // 캐시 → 로컬 state 동기화
+    useEffect(() => { if (contractsData) setContracts(contractsData); }, [contractsData]);
+    useEffect(() => { if (clientsData) setClients(clientsData); }, [clientsData]);
+
+    // fetchAll 대체 래퍼
+    const fetchAll = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['contracts'] });
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+    }, [queryClient]);
+
 
     // viewId 자동 열기
     useEffect(() => {

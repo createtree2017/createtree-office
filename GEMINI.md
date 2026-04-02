@@ -223,22 +223,26 @@ main();
 - **UI/UX 통일성**: 게시판, 에디터 등 외부 API 연동 UI 포함 모든 요소에 사전 정의된 디자인 시스템 및 인터랙션 규칙 일괄 적용
 - **데이터 흐름**: 중앙 에러 핸들러 및 통일된 API 응답 패턴 준수
 
-### ⚠️ PowerShell 터미널 규칙 (Windows 환경)
+### 🖥️ 터미널 규칙 (Git Bash 환경)
 
-> **이 프로젝트는 Windows PowerShell 환경에서 개발됨. Linux/Mac 문법이 그대로 통하지 않음.**
+> **2026.04.02**: PowerShell 5.1 → **Git Bash**로 기본 터미널 전환 완료.
+> `&&` 체이닝, 한글 처리 등 기존 제약사항이 모두 해소됨.
+> 새 환경(집/사무실) 설정 시 `docs/05-devlog/20260402-3-터미널환경GitBash전환.인수인계.md` 참고.
 
 #### 터미널 명령어 규칙
-| 잘못된 방식 (Linux) | 올바른 방식 (PowerShell) |
-|---------------------|--------------------------|
-| `cmd1 && cmd2` | 명령어를 **분리하여 순차 실행** (각각 별도 run_command) |
-| 한글 포함 긴 커밋 메시지 | **영문 단문 커밋 메시지** 사용 |
+- `&&` 체이닝 사용 가능: `cmd1 && cmd2 && cmd3`
+- 환경변수: `export VAR=value` (Bash 표준 문법)
+- 경로: `/c/Users/TOP/...` 또는 `C:\Users\TOP\...` 모두 사용 가능
 
 #### git commit 규칙
-- **한글 커밋 메시지 금지** → PowerShell 파서 오류(`InvalidEndOfLine`) 발생
-- **줄바꿈 포함 메시지 금지** → 파싱 실패
+- **영문 단문 커밋 메시지 권장** (관례상 유지)
 - **올바른 형식**: `git commit -m "feat: short english summary"`
-- **여러 명령어 연결 금지**: `git add -A && git commit ...` → `&&` 미지원
-- **올바른 순서**: `git add -A` → (완료 확인) → `git commit -m "..."` → `git push origin develop` (각각 별도 실행)
+- 여러 명령어 체이닝 가능: `git add -A && git commit -m "..." && git push origin develop`
+
+#### ⚠️ 새 환경 설정 필수 사항
+- Git Bash가 설치되어 있지 않으면 https://git-scm.com/download/win 에서 Git for Windows 설치
+- VS Code: `Ctrl+Shift+P` → `Terminal: Select Default Profile` → `Git Bash` 선택
+- 확인: 새 터미널에서 `echo $BASH_VERSION` 실행 → 버전 출력되면 정상
 
 ---
 
