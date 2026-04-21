@@ -45,8 +45,6 @@ const TemplatesPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'task' | 'monitoring'>('task');
 
     // ===== 업무 템플릿 상태 =====
-    const [templates, setTemplates] = useState<Template[]>([]);
-    const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(null);
     const [title, setTitle] = useState('');
@@ -64,9 +62,6 @@ const TemplatesPage: React.FC = () => {
     }>({ open: false, templateId: null, templateTitle: '', linkedTasks: [], loading: false });
 
     // ===== 모니터링 템플릿 상태 =====
-    const [monTemplates, setMonTemplates] = useState<MonitoringTemplate[]>([]);
-    const [monClients, setMonClients] = useState<MonitoringClient[]>([]);
-    const [monLoading, setMonLoading] = useState(false);
     const [showMonCreate, setShowMonCreate] = useState(false);
     const [editingMonTemplate, setEditingMonTemplate] = useState<MonitoringTemplate | null>(null);
     const [monClientFilter, setMonClientFilter] = useState<number | 'all' | 'unassigned'>('all');
@@ -75,7 +70,7 @@ const TemplatesPage: React.FC = () => {
     const queryClient = useQueryClient();
 
     // 업무 템플릿
-    const { data: taskTemplatesData = [], isLoading: taskTplLoading } = useQuery({
+    const { data: templates = [], isLoading: loading } = useQuery({
         queryKey: ['templates'],
         queryFn: async () => {
             const res = await fetch('/api/templates', {
@@ -88,7 +83,7 @@ const TemplatesPage: React.FC = () => {
     });
 
     // 모니터링 템플릿
-    const { data: monTemplatesData = [], isLoading: monTplLoading } = useQuery({
+    const { data: monTemplates = [], isLoading: monLoading } = useQuery({
         queryKey: ['monitoring-templates'],
         queryFn: async () => {
             const res = await fetch(`${MAPI}/templates`, { headers: getHeaders() });
@@ -100,7 +95,7 @@ const TemplatesPage: React.FC = () => {
     });
 
     // 거래처 (모니터링 탭에서 사용)
-    const { data: monClientsData = [] } = useQuery({
+    const { data: monClients = [] } = useQuery({
         queryKey: ['clients'],
         queryFn: async () => {
             const res = await fetch('/api/clients', { headers: getHeaders() });
@@ -110,11 +105,6 @@ const TemplatesPage: React.FC = () => {
         staleTime: 5 * 60 * 1000,
         enabled: activeTab === 'monitoring',
     });
-
-    // 캐시 → 로컬 state 동기화
-    useEffect(() => { setTemplates(taskTemplatesData); setLoading(taskTplLoading); }, [taskTemplatesData, taskTplLoading]);
-    useEffect(() => { setMonTemplates(monTemplatesData); }, [monTemplatesData]);
-    useEffect(() => { setMonClients(monClientsData); setMonLoading(monTplLoading); }, [monClientsData, monTplLoading]);
 
     // fetchTemplates / fetchMonitoringData 대체 래퍼
     const fetchTemplates = () => {
@@ -465,7 +455,7 @@ const TemplatesPage: React.FC = () => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {templates.map(tpl => (
+                                {templates.map((tpl: any) => (
                                     <div key={tpl.id} className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl overflow-hidden hover:shadow-lg transition flex flex-col group">
                                         <div className="p-5 flex-1 cursor-pointer" onClick={() => handleEdit(tpl)}>
                                             <h3 className="text-lg font-bold text-[hsl(var(--foreground))] group-hover:text-blue-600 transition">{tpl.title}</h3>
@@ -489,9 +479,9 @@ const TemplatesPage: React.FC = () => {
                 {activeTab === 'monitoring' && (() => {
                     // 템플릿에서 고유 거래처 목록 추출
                     const uniqueMonClients = Array.from(
-                        new Map(monTemplates.map(t => [t.clientId, monClients.find(c => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
-                    ).map(([id, name]) => ({ id, name }));
-                    const filteredMonTemplates = monClientFilter === 'all' ? monTemplates : monTemplates.filter(t => t.clientId === monClientFilter);
+                        new Map(monTemplates.map((t: any) => [t.clientId, monClients.find((c: any) => c.id === t.clientId)?.name || `거래처 #${t.clientId}`])).entries()
+                    ).map(([id, name]) => ({ id: Number(id), name: String(name) }));
+                    const filteredMonTemplates = monClientFilter === 'all' ? monTemplates : monTemplates.filter((t: any) => t.clientId === monClientFilter);
 
                     return (
                     <div className="space-y-3">
@@ -523,7 +513,7 @@ const TemplatesPage: React.FC = () => {
                                 )}
                             </div>
                         ) : (
-                            filteredMonTemplates.map((t) => (
+                            filteredMonTemplates.map((t: any) => (
                                 <div
                                     key={t.id}
                                     className="bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] p-5 flex items-start justify-between"
@@ -559,7 +549,7 @@ const TemplatesPage: React.FC = () => {
                                             </div>
                                         )}
                                         <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                                            범위: {t.monitoringScope?.join(", ")} | 거래처: {monClients.find((c) => c.id === t.clientId)?.name || t.clientId} | 수집: {t.collectCount}건
+                                            범위: {t.monitoringScope?.join(", ")} | 거래처: {monClients.find((c: any) => c.id === t.clientId)?.name || t.clientId} | 수집: {t.collectCount}건
                                             {t.scheduleEnabled && t.scheduleCron && (() => {
                                                 const parts = t.scheduleCron.split(' ');
                                                 if (parts[0].startsWith('*/')) return ` | 자동: ⚡ ${parts[0].slice(2)}분마다`;

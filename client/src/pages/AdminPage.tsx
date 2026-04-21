@@ -33,6 +33,7 @@ interface Client {
     linkedQuotationId?: number | null;
     linkedContractId?: number | null;
     deletedAt?: string | null;
+    activeContracts?: { id: number, contractNumber: string, title: string, startDate: string, endDate: string }[];
 }
 
 interface LinkableQuotation {
@@ -79,11 +80,7 @@ const AdminPage = () => {
     const [businessRegClientId, setBusinessRegClientId] = useState<number | null>(null);
     const [businessRegFile, setBusinessRegFile] = useState<File | null>(null);
 
-    // 연결 모달 상태
-    const [linkModal, setLinkModal] = useState<{ type: 'quotation' | 'contract'; clientId: number } | null>(null);
-    const [linkableQuotations, setLinkableQuotations] = useState<LinkableQuotation[]>([]);
-    const [linkableContracts, setLinkableContracts] = useState<LinkableContract[]>([]);
-    const [linkLoading, setLinkLoading] = useState(false);
+    const [activeContractsModalClientId, setActiveContractsModalClientId] = useState<number | null>(null);
 
     useEffect(() => {
         if (tabParam && ['users', 'clients'].includes(tabParam)) {
@@ -163,55 +160,7 @@ const AdminPage = () => {
     const fetchUsers = () => queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     const fetchClients = () => queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
 
-    // ===== 연결 모달 핸들러 =====
-    const openLinkModal = async (type: 'quotation' | 'contract', clientId: number) => {
-        setLinkModal({ type, clientId });
-        setLinkLoading(true);
-        try {
-            if (type === 'quotation') {
-                const res = await fetch('/api/quotations', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await res.json();
-                if (data.success) {
-                    // 해당 거래처의 승인된 견적서만 필터
-                    setLinkableQuotations(data.data.filter((q: any) => q.clientId === clientId && q.status === 'approved'));
-                }
-            } else {
-                const res = await fetch('/api/contracts', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await res.json();
-                if (data.success) {
-                    // 해당 거래처의 signed/active 계약서만 필터
-                    setLinkableContracts(data.data.filter((c: any) => c.clientId === clientId && ['signed', 'active'].includes(c.status)));
-                }
-            }
-        } catch { toast.error('목록 조회 실패'); }
-        setLinkLoading(false);
-    };
 
-    const handleLink = async (clientId: number, type: 'quotation' | 'contract', docId: number | null) => {
-        try {
-            const body: any = {};
-            if (type === 'quotation') body.linkedQuotationId = docId;
-            else body.linkedContractId = docId;
-
-            const res = await fetch(`/api/clients/${clientId}/link`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify(body),
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast.success(data.message);
-                fetchClients();
-                setLinkModal(null);
-            } else {
-                toast.error(data.message);
-            }
-        } catch { toast.error('연결 업데이트 실패'); }
-    };
 
     const handleSyncClients = async () => {
         setSyncingClients(true);
@@ -645,68 +594,26 @@ const AdminPage = () => {
                                                 </button>
                                             </div>
 
-                                            {/* 계약기간 */}
-                                            {(client.contractStartDate || client.contractEndDate) && (
-                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                                                    <span>📅</span> {client.contractStartDate || '?'} ~ {client.contractEndDate || '?'}
-                                                </p>
-                                            )}
 
-                                            {/* 버튼 그리드 — 견적서, 계약서, 사업자등록증 */}
+
+                                            {/* 버튼 그리드 — 계약서, 사업자등록증 */}
                                             <div className="grid grid-cols-2 gap-2">
-                                                {/* 견적서 버튼 */}
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => {
-                                                            if (client.linkedQuotationId) {
-                                                                navigate(`/quotations?viewId=${client.linkedQuotationId}`);
-                                                            } else {
-                                                                navigate(`/quotations?clientId=${client.id}`);
-                                                            }
-                                                        }}
-                                                        className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold transition-all border ${
-                                                            client.linkedQuotationId
-                                                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-600'
-                                                                : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-400 dark:text-indigo-500 border-indigo-200 dark:border-indigo-700/50'
-                                                        } hover:bg-indigo-200 dark:hover:bg-indigo-900/60`}
-                                                    >
-                                                        📋 견적서 · <span className="text-[9px]">{client.linkedQuotationId ? '연결됨' : '연결안됨'}</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); openLinkModal('quotation', client.id); }}
-                                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-200 dark:bg-slate-600 rounded-full flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 hover:bg-blue-500 hover:text-white transition-all shadow-sm"
-                                                        title="견적서 연결 관리"
-                                                    >
-                                                        ⚙
-                                                    </button>
-                                                </div>
-
-                                                {/* 계약서 버튼 */}
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => {
-                                                            if (client.linkedContractId) {
-                                                                navigate(`/contracts?viewId=${client.linkedContractId}`);
-                                                            } else {
-                                                                navigate(`/contracts?clientId=${client.id}`);
-                                                            }
-                                                        }}
-                                                        className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold transition-all border ${
-                                                            client.linkedContractId
-                                                                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600'
-                                                                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-400 dark:text-blue-500 border-blue-200 dark:border-blue-700/50'
-                                                        } hover:bg-blue-200 dark:hover:bg-blue-900/60`}
-                                                    >
-                                                        📄 계약서 · <span className="text-[9px]">{client.linkedContractId ? '연결됨' : '연결안됨'}</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); openLinkModal('contract', client.id); }}
-                                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-200 dark:bg-slate-600 rounded-full flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 hover:bg-blue-500 hover:text-white transition-all shadow-sm"
-                                                        title="계약서 연결 관리"
-                                                    >
-                                                        ⚙
-                                                    </button>
-                                                </div>
+                                                {/* 계약서 목록 버튼 */}
+                                                <button
+                                                    onClick={() => setActiveContractsModalClientId(client.id)}
+                                                    className={`w-full flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] transition-all border ${
+                                                        client.activeContracts && client.activeContracts.length > 0
+                                                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-600 hover:bg-blue-200'
+                                                            : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    <span className="font-bold flex items-center gap-1">📄 계약서</span>
+                                                    <span className="text-[10px] opacity-80 font-medium">
+                                                        {client.activeContracts && client.activeContracts.length > 0 
+                                                            ? `진행 중: ${client.activeContracts.length}건` 
+                                                            : '진행 중인 계약 없음'}
+                                                    </span>
+                                                </button>
 
                                                 {/* 사업자등록증 버튼 */}
                                                 {client.businessRegDriveId ? (
@@ -868,85 +775,46 @@ const AdminPage = () => {
                 </div>
             )}
 
-            {/* 연결 모달 */}
-            {linkModal && (
-                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLinkModal(null)}>
-                    <div className="w-full max-w-md bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-slate-200 dark:border-[hsl(var(--border))] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            {/* 다중 계약서 팝업 모달 */}
+            {activeContractsModalClientId && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveContractsModalClientId(null)}>
+                    <div className="w-full max-w-md bg-white dark:bg-[hsl(var(--card))] rounded-2xl shadow-2xl border border-slate-200 dark:border-[hsl(var(--border))] animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
                             <div>
-                                <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-0.5">
-                                    {linkModal.type === 'quotation' ? '견적서' : '계약서'} 연결
-                                </p>
+                                <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-0.5">계약 목록</p>
                                 <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                                    {clients.find(c => c.id === linkModal.clientId)?.name}
+                                    {clients.find(c => c.id === activeContractsModalClientId)?.name}
                                 </h2>
                             </div>
-                            <button onClick={() => setLinkModal(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors font-bold text-lg">✕</button>
+                            <button onClick={() => setActiveContractsModalClientId(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors font-bold text-lg">✕</button>
                         </div>
-                        <div className="p-6 flex flex-col gap-3 max-h-80 overflow-y-auto">
-                            {linkLoading ? (
-                                <p className="text-center text-sm text-slate-400 py-6">불러오는 중...</p>
-                            ) : linkModal.type === 'quotation' ? (
-                                linkableQuotations.length === 0 ? (
-                                    <p className="text-center text-sm text-slate-400 py-6">승인된 견적서가 없습니다</p>
-                                ) : (
-                                    linkableQuotations.map(q => {
-                                        const currentClient = clients.find(c => c.id === linkModal.clientId);
-                                        const isLinked = currentClient?.linkedQuotationId === q.id;
-                                        return (
-                                            <button
-                                                key={q.id}
-                                                onClick={() => handleLink(linkModal.clientId, 'quotation', isLinked ? null : q.id)}
-                                                className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between ${
-                                                    isLinked
-                                                        ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-600'
-                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
-                                                }`}
-                                            >
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{q.title}</p>
-                                                    <p className="text-[10px] text-slate-400">{q.quotationNumber} · {q.totalAmount}만원</p>
-                                                </div>
-                                                {isLinked ? (
-                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">연결됨 ✕</span>
-                                                ) : (
-                                                    <span className="text-xs font-bold text-slate-400">선택</span>
-                                                )}
-                                            </button>
-                                        );
-                                    })
-                                )
+                        <div className="p-6 flex flex-col gap-3 overflow-y-auto">
+                            {clients.find(c => c.id === activeContractsModalClientId)?.activeContracts?.length ? (
+                                clients.find(c => c.id === activeContractsModalClientId)!.activeContracts!.map(ct => (
+                                    <button
+                                        key={ct.id}
+                                        onClick={() => navigate(`/contracts?viewId=${ct.id}`)}
+                                        className="w-full text-left px-4 py-3 rounded-xl border bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:border-blue-400 transition-all flex flex-col gap-1"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{ct.title}</p>
+                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-900 px-2 py-0.5 rounded-full">활성</span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-500">{ct.contractNumber}</p>
+                                        <p className="text-[11px] text-slate-500 font-medium">{ct.startDate} ~ {ct.endDate}</p>
+                                    </button>
+                                ))
                             ) : (
-                                linkableContracts.length === 0 ? (
-                                    <p className="text-center text-sm text-slate-400 py-6">서명/활성 상태의 계약서가 없습니다</p>
-                                ) : (
-                                    linkableContracts.map(c => {
-                                        const currentClient = clients.find(cl => cl.id === linkModal.clientId);
-                                        const isLinked = currentClient?.linkedContractId === c.id;
-                                        return (
-                                            <button
-                                                key={c.id}
-                                                onClick={() => handleLink(linkModal.clientId, 'contract', isLinked ? null : c.id)}
-                                                className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between ${
-                                                    isLinked
-                                                        ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600'
-                                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
-                                                }`}
-                                            >
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{c.title}</p>
-                                                    <p className="text-[10px] text-slate-400">{c.contractNumber} · {c.totalAmount}만원</p>
-                                                </div>
-                                                {isLinked ? (
-                                                    <span className="text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">연결됨 ✕</span>
-                                                ) : (
-                                                    <span className="text-xs font-bold text-slate-400">선택</span>
-                                                )}
-                                            </button>
-                                        );
-                                    })
-                                )
+                                <p className="text-center text-sm text-slate-400 py-6">진행 중인 계약서가 없습니다.</p>
                             )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 rounded-b-2xl flex justify-end">
+                            <button
+                                onClick={() => navigate(`/contracts?clientId=${activeContractsModalClientId}`)}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <span>+</span> 새 계약 추가 / 목록 이동
+                            </button>
                         </div>
                     </div>
                 </div>

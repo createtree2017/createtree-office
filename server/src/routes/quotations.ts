@@ -200,7 +200,7 @@ router.get("/:id", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async
 // ────────────────────────────────────────────
 router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
     try {
-        const { clientId, title, contractMonths, discountPolicyId, discountApplied,
+        const { clientId, title, contractMonths, discountPolicyId, discountApplied, vatIncluded,
             subtotal, discountAmount, totalAmount, monthlyAmount,
             notes, validUntil, items, serviceConfigs } = req.body;
 
@@ -219,6 +219,7 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) =
             contractMonths,
             discountPolicyId: discountPolicyId || null,
             discountApplied: discountApplied || false,
+            vatIncluded: vatIncluded !== undefined ? vatIncluded : true,
             subtotal: subtotal || 0,
             discountAmount: discountAmount || 0,
             totalAmount: totalAmount || 0,
@@ -247,6 +248,8 @@ router.post("/", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) =
                     amount: item.amount,
                     isRequired: item.isRequired !== undefined ? item.isRequired : true,
                     paymentMethod: item.paymentMethod || null,
+                    remark: item.remark || null,
+                    isCustom: item.isCustom || false,
                     sortOrder: item.sortOrder || 0,
                 });
             }
@@ -288,7 +291,7 @@ router.put("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res)
         const [existing] = await db.select().from(quotations).where(eq(quotations.id, id));
         if (!existing) return res.status(404).json({ success: false, message: "견적서를 찾을 수 없습니다." });
 
-        const { clientId, title, contractMonths, discountPolicyId, discountApplied,
+        const { clientId, title, contractMonths, discountPolicyId, discountApplied, vatIncluded,
             subtotal, discountAmount, totalAmount, monthlyAmount,
             notes, validUntil, items, serviceConfigs } = req.body;
 
@@ -299,6 +302,7 @@ router.put("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res)
             contractMonths: contractMonths !== undefined ? contractMonths : existing.contractMonths,
             discountPolicyId: discountPolicyId !== undefined ? discountPolicyId : existing.discountPolicyId,
             discountApplied: discountApplied !== undefined ? discountApplied : existing.discountApplied,
+            vatIncluded: vatIncluded !== undefined ? vatIncluded : existing.vatIncluded,
             subtotal: subtotal !== undefined ? subtotal : existing.subtotal,
             discountAmount: discountAmount !== undefined ? discountAmount : existing.discountAmount,
             totalAmount: totalAmount !== undefined ? totalAmount : existing.totalAmount,
@@ -328,6 +332,8 @@ router.put("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res)
                         amount: item.amount || 0,
                         isRequired: item.isRequired !== undefined ? item.isRequired : true,
                         paymentMethod: item.paymentMethod || null,
+                        remark: item.remark || null,
+                        isCustom: item.isCustom || false,
                         sortOrder: item.sortOrder || 0,
                     });
                 }
@@ -371,6 +377,10 @@ router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, r
 
         const [existing] = await db.select().from(quotations).where(eq(quotations.id, id));
         if (!existing) return res.status(404).json({ success: false, message: "견적서를 찾을 수 없습니다." });
+
+        if (existing.status === 'approved') {
+            return res.status(400).json({ success: false, message: "이미 계약이 진행된 완료본(승인됨)은 삭제할 수 없습니다." });
+        }
 
         await db.delete(quotations).where(eq(quotations.id, id)); // cascade로 items, configs도 삭제
         res.json({ success: true, message: `견적서 ${existing.quotationNumber}이 삭제되었습니다.` });

@@ -150,6 +150,7 @@ router.post("/from-quotation/:quotationId", authenticateToken, authorizeRole(["A
             contractMonths: qt.contractMonths,
             startDate: startDate || null,
             endDate: endDate || null,
+            vatIncluded: qt.vatIncluded,
             subtotal: qt.subtotal,
             discountAmount: qt.discountAmount,
             totalAmount: qt.totalAmount,
@@ -290,6 +291,7 @@ router.post("/:id/renew", authenticateToken, authorizeRole(["ADMIN"]), async (re
             contractMonths: contractMonths !== undefined ? contractMonths : existing.contractMonths,
             startDate: startDate || null,
             endDate: endDate || null,
+            vatIncluded: existing.vatIncluded,
             subtotal: existing.subtotal,
             discountAmount: existing.discountAmount,
             totalAmount: existing.totalAmount,
@@ -366,6 +368,27 @@ router.get("/client/:clientId/services", authenticateToken, authorizeRole(["ADMI
     } catch (error: any) {
         console.error("거래처 계약 서비스 조회 오류:", error);
         res.status(500).json({ success: false, message: "조회 중 오류" });
+    }
+});
+
+// DELETE /api/contracts/:id
+router.delete("/:id", authenticateToken, authorizeRole(["ADMIN"]), async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: "유효하지 않은 ID입니다." });
+
+        const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
+        if (!existing) return res.status(404).json({ success: false, message: "계약서를 찾을 수 없습니다." });
+
+        if (['active', 'terminated', 'expired'].includes(existing.status)) {
+            return res.status(400).json({ success: false, message: "완료본(활성, 해지, 만료) 계약서는 삭제할 수 없습니다. 대신 상태를 변경해주세요." });
+        }
+
+        await db.delete(contracts).where(eq(contracts.id, id));
+        res.json({ success: true, message: `계약서 ${existing.contractNumber}이 삭제되었습니다.` });
+    } catch (error: any) {
+        console.error("계약서 삭제 오류:", error);
+        res.status(500).json({ success: false, message: "계약서 삭제 중 오류가 발생했습니다." });
     }
 });
 

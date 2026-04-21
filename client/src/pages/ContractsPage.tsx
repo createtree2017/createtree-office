@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { FileText, ArrowLeft, Calendar, Building2, Download } from 'lucide-react';
+import { FileText, ArrowLeft, Calendar, Building2, Download, Trash2 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
 
 type ContractStatus = 'draft' | 'signed' | 'active' | 'expired' | 'terminated';
-interface Contract { id: number; contractNumber: string; quotationId?: number | null; clientId: number; clientName?: string; title: string; contractMonths: number; startDate?: string; endDate?: string; subtotal: number; discountAmount: number; totalAmount: number; monthlyAmount: number; notes?: string; commonTerms?: string; specialTerms?: string; status: ContractStatus; signedAt?: string; createdBy?: number | null; createdByName?: string; createdAt: string; updatedAt: string; quotationNumber?: string; }
+interface Contract { id: number; contractNumber: string; quotationId?: number | null; clientId: number; clientName?: string; title: string; contractMonths: number; startDate?: string; endDate?: string; vatIncluded?: boolean; subtotal: number; discountAmount: number; totalAmount: number; monthlyAmount: number; notes?: string; commonTerms?: string; specialTerms?: string; status: ContractStatus; signedAt?: string; createdBy?: number | null; createdByName?: string; createdAt: string; updatedAt: string; quotationNumber?: string; }
 
 const API = '/api/contracts';
 const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -159,11 +159,28 @@ const ContractsPage: React.FC = () => {
         } catch { toast.error('계약 갱신 실패'); }
     };
 
+    const handleDelete = async (ct: Contract) => {
+        if (!['draft', 'signed'].includes(ct.status)) {
+            return toast.error('진행 중인 계약서만 삭제할 수 있습니다.');
+        }
+        if (!confirm(`계약서 ${ct.contractNumber}을 완전히 삭제하시겠습니까?`)) return;
+        
+        try {
+            const res = await fetch(`${API}/${ct.id}`, { method: 'DELETE', headers: hdrs() });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                if (view === 'detail' && detail?.id === ct.id) setView('list');
+                fetchAll();
+            } else toast.error(data.message);
+        } catch { toast.error('삭제 실패'); }
+    };
+
     if (!user || !['ADMIN', 'MANAGER'].includes(user.role)) return <div className="p-8 text-center text-red-500">접근 권한이 없습니다.</div>;
 
     // ===== 상세 뷰 =====
     if (view === 'detail' && detail) {
-        const vatAmount = Math.round(detail.totalAmount * 0.1);
+        const vatAmount = detail ? (detail.vatIncluded !== false ? Math.round(detail.totalAmount * 0.1) : 0) : 0;
         return (
             <div className="max-w-4xl mx-auto p-6 pt-20 space-y-6">
                 <div className="flex items-center justify-between">
@@ -208,6 +225,11 @@ const ContractsPage: React.FC = () => {
                                 }).from(el).save();
                             }} className="px-3 py-1.5 border border-[hsl(var(--border))] rounded-lg text-sm hover:bg-[hsl(var(--accent))] flex items-center gap-1">
                                 <Download size={14} /> PDF
+                            </button>
+                        )}
+                        {!editMode && !renewMode && user?.role === 'ADMIN' && ['draft', 'signed'].includes(detail.status) && (
+                            <button onClick={() => handleDelete(detail)} className="px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center gap-1 ml-2">
+                                <Trash2 size={14} /> 삭제
                             </button>
                         )}
                     </div>
@@ -345,11 +367,13 @@ const ContractsPage: React.FC = () => {
                         <div className="text-sm"><span className="text-[hsl(var(--muted-foreground))]">소계:</span> {detail.subtotal}만원</div>
                         {detail.discountAmount > 0 && <div className="text-sm text-red-500">할인: -{detail.discountAmount}만원</div>}
                         <div className="text-sm">공급가액: <strong>{detail.totalAmount}만원</strong></div>
-                        <div className="text-sm text-[hsl(var(--muted-foreground))]">부가세 (10%): <strong>{vatAmount}만원</strong></div>
+                        <div className="text-sm text-[hsl(var(--muted-foreground))]">부가세 ({detail.vatIncluded !== false ? '10%' : '0%'}): <strong>{detail.vatIncluded !== false ? Math.round(detail.totalAmount * 0.1) : 0}만원</strong></div>
                         <div className="border-t border-[hsl(var(--border))] mt-2 pt-2">
-                            <div className="text-lg font-bold text-[hsl(var(--foreground))]">합계 (VAT 포함): {detail.totalAmount + vatAmount}만원</div>
+                            <div className="text-lg font-bold text-[hsl(var(--foreground))]">
+                                {detail.vatIncluded !== false ? '합계 (VAT 포함)' : '합계 (VAT 미포함)'}: {detail.totalAmount + (detail.vatIncluded !== false ? Math.round(detail.totalAmount * 0.1) : 0)}만원
+                            </div>
                         </div>
-                        {detail.contractMonths > 0 && <div className="text-lg font-bold text-blue-600">월 청구: {Math.round(detail.monthlyAmount * 1.1)}만원/월 (VAT 포함)</div>}
+                        {detail.contractMonths > 0 && <div className="text-lg font-bold text-blue-600">월 청구: {Math.round(detail.monthlyAmount * (detail.vatIncluded !== false ? 1.1 : 1))}만원/월 ({detail.vatIncluded !== false ? 'VAT 포함' : 'VAT 미포함'})</div>}
                     </div>
                     {detail.notes && <div className="bg-[hsl(var(--accent))] p-4 rounded-lg text-sm"><strong>비고:</strong> <span style={{whiteSpace: 'pre-wrap'}}>{detail.notes}</span></div>}
 
@@ -402,6 +426,7 @@ const ContractsPage: React.FC = () => {
                                 <th className="p-3 text-center font-semibold">상태</th>
                                 <th className="p-3 text-center font-semibold">견적서</th>
                                 <th className="p-3 text-center font-semibold">작성일</th>
+                                <th className="p-3 text-center font-semibold">관리</th>
                             </tr></thead>
                             <tbody>
                                 {contracts
@@ -416,6 +441,15 @@ const ContractsPage: React.FC = () => {
                                         <td className="p-3 text-center"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[ct.status]}`}>{STATUS_LABELS[ct.status]}</span></td>
                                         <td className="p-3 text-center text-xs">{ct.quotationNumber || '-'}</td>
                                         <td className="p-3 text-center text-xs">{new Date(ct.createdAt).toLocaleDateString('ko-KR')}</td>
+                                        <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
+                                            <div className="flex gap-2 justify-center">
+                                                {user?.role === 'ADMIN' && ['draft', 'signed'].includes(ct.status) && (
+                                                    <button onClick={() => handleDelete(ct)} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded text-[hsl(var(--muted-foreground))] transition-colors" title="삭제">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

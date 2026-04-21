@@ -287,6 +287,7 @@ export const quotations = pgTable("quotations", {
     discountPolicyId: integer("discount_policy_id")
         .references(() => contractDiscountPolicies.id, { onDelete: "set null" }),
     discountApplied: boolean("discount_applied").default(false).notNull(),
+    vatIncluded: boolean("vat_included").default(true).notNull(),
     subtotal: integer("subtotal").default(0).notNull(),       // 할인 전 총액 (만원)
     discountAmount: integer("discount_amount").default(0).notNull(), // 할인 금액 (만원)
     totalAmount: integer("total_amount").default(0).notNull(), // 최종 금액 (만원)
@@ -318,6 +319,8 @@ export const quotationItems = pgTable("quotation_items", {
     amount: integer("amount").notNull(), // quantity * unitPrice
     isRequired: boolean("is_required").default(true).notNull(),
     paymentMethod: paymentMethodEnum("payment_method"), // null이면 기본 월정산
+    remark: text("remark"), // 비고 (신규)
+    isCustom: boolean("is_custom").default(false).notNull(), // 직접입력/할인 등 커스텀 항목 여부
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -360,6 +363,7 @@ export const contracts = pgTable("contracts", {
     contractMonths: integer("contract_months").notNull(), // 0 = 단건
     startDate: date("start_date"),
     endDate: date("end_date"),
+    vatIncluded: boolean("vat_included").default(true).notNull(),
     subtotal: integer("subtotal").default(0).notNull(),
     discountAmount: integer("discount_amount").default(0).notNull(),
     totalAmount: integer("total_amount").default(0).notNull(),

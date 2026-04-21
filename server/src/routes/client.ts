@@ -4,6 +4,7 @@ import { clients, users, tasks } from "../db/schema.js";
 import { authenticateToken, authorizeRole } from "../middleware/auth.js";
 import { google } from "googleapis";
 import { eq, isNull, isNotNull, asc } from "drizzle-orm";
+import { contracts } from "../db/schema.js";
 import multer from "multer";
 
 const router = Router();
@@ -71,7 +72,23 @@ router.get("/", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), async (r
         const allClients = await db.select().from(clients)
             .where(isNull(clients.deletedAt))
             .orderBy(asc(clients.sortOrder));
-        res.json({ success: true, data: allClients });
+            
+        // 각 거래처별 active 계약서 목록 조회
+        const activeContractsList = await db.select({
+            id: contracts.id,
+            clientId: contracts.clientId,
+            contractNumber: contracts.contractNumber,
+            title: contracts.title,
+            startDate: contracts.startDate,
+            endDate: contracts.endDate
+        }).from(contracts).where(eq(contracts.status, 'active'));
+        
+        const data = allClients.map(c => {
+            const activeContracts = activeContractsList.filter(ct => ct.clientId === c.id);
+            return { ...c, activeContracts };
+        });
+
+        res.json({ success: true, data });
     } catch (error: any) {
         console.error("Client fetch error:", error);
         res.status(500).json({ success: false, message: "거래처 목록을 불러오지 못했습니다." });
