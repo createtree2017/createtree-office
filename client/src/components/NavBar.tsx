@@ -60,8 +60,6 @@ const NavBar = () => {
             { path: '/', label: '홈', icon: Home },
             { path: '/manuals', label: '매뉴얼', icon: Book },
             { path: '/tasks', label: '업무', icon: CheckSquare },
-            { path: '/market-research', label: '시장조사', icon: LineChart },
-            { path: '/sales-leads', label: '영업관리', icon: Target },
         ] : []),
         ...(user && ['ADMIN', 'MANAGER', 'HOSPITAL_ADMIN'].includes(user.role) ? [
             { path: '/monitoring', label: '모니터링', icon: Activity },
@@ -72,6 +70,9 @@ const NavBar = () => {
     const managementItems = [
         { path: '/admin?tab=users', label: '거래처 관리', icon: Briefcase, matchPaths: ['/admin', '/quotations', '/contracts'] },
         { path: '/templates', label: '상품 관리', icon: Package, matchPaths: ['/templates', '/services'] },
+        { path: '/drive', label: '자료실', icon: FolderOpen, matchPaths: ['/drive'] },
+        { path: '/market-research', label: '시장조사', icon: LineChart, matchPaths: ['/market-research'] },
+        { path: '/sales-leads', label: '영업관리', icon: Target, matchPaths: ['/sales-leads'] },
     ];
 
     const isAdminOrManager = user && ['ADMIN', 'MANAGER'].includes(user.role);
@@ -146,22 +147,6 @@ const NavBar = () => {
                         })}
                     </>
                 )}
-
-                {isAdminOrManager && (() => {
-                    const isDriveActive = location.pathname.startsWith('/drive');
-                    return (
-                        <button
-                            onClick={() => navigate('/drive')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${isDriveActive
-                                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200 dark:shadow-emerald-900/50'
-                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                            }`}
-                        >
-                            <FolderOpen size={14} />
-                            <span className="hidden sm:block">자료실</span>
-                        </button>
-                    );
-                })()}
 
                 <button
                     onClick={toggle}
