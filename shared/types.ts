@@ -190,3 +190,164 @@ export interface Contract {
     quotationNumber?: string;
 }
 
+// ===== 시장조사 / 영업관리 타입 =====
+
+export type MarketResearchBusinessType =
+    | 'obgyn'
+    | 'delivery_hospital'
+    | 'general_obgyn'
+    | 'women_hospital'
+    | 'postpartum_center';
+
+export type MarketResearchOperationStatus = 'operating' | 'closed' | 'newly_opened' | 'unknown';
+export type MarketResearchVerificationStatus = 'auto_collected' | 'needs_review' | 'verified' | 'manually_corrected';
+
+export type SalesStatus =
+    | 'not_contacted'
+    | 'material_allowed'
+    | 'material_sent'
+    | 'called'
+    | 'visit_scheduled'
+    | 'visited'
+    | 'meeting_scheduled'
+    | 'pilot_proposed'
+    | 'quotation_proposed'
+    | 'contracting'
+    | 'operating'
+    | 'closed'
+    | 'on_hold'
+    | 'rejected'
+    | 'unsubscribed';
+
+export type SalesActivityType = 'email' | 'call' | 'sns' | 'visit' | 'meeting' | 'feedback' | 'memo';
+export type SalesMessageStatus = 'draft' | 'blocked' | 'queued' | 'sent' | 'failed';
+
+export interface MarketResearchRun {
+    id: number;
+    title: string;
+    regionScope: string;
+    regions: string[];
+    businessTypes: string[];
+    operationStatuses: string[];
+    sources: string[];
+    status: string;
+    stats?: Record<string, any>;
+    errorLog?: any[];
+    startedAt?: string | null;
+    completedAt?: string | null;
+    createdBy?: number | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface MarketResearchItem {
+    id: number;
+    runId?: number | null;
+    stableKey: string;
+    businessType: MarketResearchBusinessType;
+    name: string;
+    region: string;
+    city?: string | null;
+    district?: string | null;
+    address?: string | null;
+    operationStatus: MarketResearchOperationStatus;
+    phone?: string | null;
+    email?: string | null;
+    website?: string | null;
+    instagram?: string | null;
+    blog?: string | null;
+    kakaoChannel?: string | null;
+    naverTalk?: string | null;
+    openDate?: string | null;
+    closedDate?: string | null;
+    isNew: boolean;
+    hasUpdates: boolean;
+    isSelected: boolean;
+    isDeliveryHospital: boolean;
+    deliveryCountYear?: number | null;
+    deliveryCount?: number | null;
+    deliveryCountSource?: string | null;
+    medicalDepartments?: string[];
+    doctorCounts?: Record<string, number>;
+    totalDoctorCount?: number | null;
+    hasDeliveryCenter: boolean;
+    hasFertilityCenter: boolean;
+    hasPediatricLink: boolean;
+    roomCount?: number | null;
+    motherCapacity?: number | null;
+    babyCapacity?: number | null;
+    roomGrades?: Array<{ grade: string; count?: number; price?: string }>;
+    aestheticBrand?: string | null;
+    additionalServices?: string[];
+    buildingScale?: string | null;
+    occupiedFloors?: string | null;
+    isStandaloneBuilding?: boolean | null;
+    parkingAvailable?: boolean | null;
+    latitude?: string | null;
+    longitude?: string | null;
+    marketScore: number;
+    priorityGrade: string;
+    sources?: string[];
+    sourceUrls?: string[];
+    sourceConfidence: string;
+    verificationStatus: MarketResearchVerificationStatus;
+    memo?: string | null;
+    lastResearchedAt: string;
+    createdAt: string;
+    updatedAt: string;
+    salesLeadId?: number | null;
+    salesStatus?: SalesStatus | null;
+}
+
+export interface SalesLead {
+    id: number;
+    marketResearchItemId: number;
+    clientId?: number | null;
+    status: SalesStatus;
+    ownerId?: number | null;
+    selectedBy?: number | null;
+    selectedAt: string;
+    contactConsentStatus: string;
+    contactPerson?: string | null;
+    contactRole?: string | null;
+    nextAction?: string | null;
+    nextActionDate?: string | null;
+    notes?: string | null;
+    isArchived: boolean;
+    createdAt: string;
+    updatedAt: string;
+    item?: MarketResearchItem;
+    activities?: SalesActivity[];
+}
+
+export interface SalesActivity {
+    id: number;
+    salesLeadId: number;
+    activityType: SalesActivityType;
+    activityDate: string;
+    channel?: string | null;
+    subject?: string | null;
+    content?: string | null;
+    outcome?: string | null;
+    nextAction?: string | null;
+    nextActionDate?: string | null;
+    attachments?: any[];
+    createdBy?: number | null;
+    createdAt: string;
+}
+
+export interface SalesMaterial {
+    id: number;
+    title: string;
+    materialType: string;
+    description?: string | null;
+    driveFileId?: string | null;
+    driveFileName?: string | null;
+    driveWebViewLink?: string | null;
+    externalUrl?: string | null;
+    version: string;
+    isActive: boolean;
+    createdBy?: number | null;
+    createdAt: string;
+    updatedAt: string;
+}

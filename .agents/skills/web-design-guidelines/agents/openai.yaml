@@ -1,0 +1,7 @@
+interface:
+  display_name: "웹 디자인 가이드"
+  short_description: "UI·UX·접근성 기본 품질 점검"
+  brand_color: "#2563EB"
+  default_prompt: "Use $web-design-guidelines to audit the current web UI against interface best practices."
+policy:
+  allow_implicit_invocation: false

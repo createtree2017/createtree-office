@@ -1,0 +1,6 @@
+interface:
+  display_name: "Office Drizzle Guardian"
+  short_description: "Drizzle·Railway DB 변경 안전 기준"
+  default_prompt: "Use $office-drizzle-guardian to review CT_office database changes."
+policy:
+  allow_implicit_invocation: true

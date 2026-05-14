@@ -1,0 +1,6 @@
+interface:
+  display_name: "CT Office 운영"
+  short_description: "사내 포털·업무·거래처 운영 기준"
+  default_prompt: "Use $createtree-office-ops to work safely on createTree Office."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Office Google Workspace"
+  short_description: "Drive·Forms·Calendar 연동 기준"
+  default_prompt: "Use $office-google-workspace to work on CT_office Google integrations."
+policy:
+  allow_implicit_invocation: true

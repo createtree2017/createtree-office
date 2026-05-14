@@ -1,0 +1,7 @@
+interface:
+  display_name: "웹 품질 감사"
+  short_description: "성능·접근성·SEO 종합 점검"
+  brand_color: "#0EA5E9"
+  default_prompt: "Use $web-quality-audit to audit the landing page quality."
+policy:
+  allow_implicit_invocation: false
