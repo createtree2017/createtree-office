@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity, CheckSquare, Database, Download, Edit3, Filter, Play, RefreshCw, Save, Search, Square, Star, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -14,7 +14,7 @@ import {
 
 const BUSINESS_TYPES = [
     { value: 'all', label: '전체' },
-    { value: 'obgyn', label: '산부인과+여성병원' },
+    { value: 'obgyn', label: '산부인과 보유기관' },
     { value: 'delivery_hospital', label: '분만병원' },
     { value: 'general_obgyn', label: '일반 산부인과' },
     { value: 'postpartum_center', label: '산후조리원' },
@@ -83,13 +83,14 @@ const MarketResearchPage = () => {
     const [editForm, setEditForm] = useState<Partial<MarketResearchItem>>({});
 
     const { data: runs = [], isLoading: runsLoading } = useMarketResearchRuns();
-    const { data: items = [], isLoading } = useMarketResearchItems(filters);
+    const latestRun = runs[0];
+    const researchInProgress = latestRun?.status === 'running' || latestRun?.status === 'pending';
+    const { data: items = [], isLoading, refetch: refetchItems } = useMarketResearchItems(filters, researchInProgress);
     const createRun = useCreateMarketResearchRun();
     const selectItem = useSelectMarketResearchItem();
     const unselectItem = useUnselectMarketResearchItem();
     const updateItem = useUpdateMarketResearchItem();
 
-    const latestRun = runs[0];
     const summary = useMemo(() => ({
         total: items.length,
         selected: items.filter(item => item.isSelected).length,
@@ -97,6 +98,12 @@ const MarketResearchPage = () => {
         updated: items.filter(item => item.hasUpdates).length,
         closed: items.filter(item => item.operationStatus === 'closed').length,
     }), [items]);
+
+    useEffect(() => {
+        if (latestRun && ['completed', 'partial_failed', 'failed'].includes(latestRun.status)) {
+            refetchItems();
+        }
+    }, [latestRun?.id, latestRun?.status, refetchItems]);
 
     const toggleSelectedId = (id: number) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
@@ -163,12 +170,19 @@ const MarketResearchPage = () => {
                             <Download size={16} />
                             엑셀 다운로드
                         </button>
-                        <button onClick={handleRunResearch} disabled={createRun.isPending} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold disabled:opacity-50">
-                            {createRun.isPending ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-                            시장조사 실행
+                        <button onClick={handleRunResearch} disabled={createRun.isPending || researchInProgress} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold disabled:opacity-50">
+                            {createRun.isPending || researchInProgress ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+                            {createRun.isPending || researchInProgress ? '시장조사 진행 중' : '시장조사 실행'}
                         </button>
                     </div>
                 </div>
+
+                {researchInProgress && (
+                    <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                        <RefreshCw size={16} className="animate-spin" />
+                        시장조사가 진행 중입니다. 완료될 때까지 실행 상태와 결과 목록을 자동으로 새로고침합니다.
+                    </div>
+                )}
 
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     {[

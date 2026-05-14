@@ -78,11 +78,12 @@ export function useMarketResearchRuns() {
       if (!data.success) throw new Error('Failed to fetch research runs');
       return data.data;
     },
-    staleTime: 30 * 1000,
+    refetchInterval: 5 * 1000,
+    staleTime: 0,
   });
 }
 
-export function useMarketResearchItems(filters: MarketResearchFilters) {
+export function useMarketResearchItems(filters: MarketResearchFilters, poll = false) {
   return useQuery({
     queryKey: ['market-research-items', filters],
     queryFn: async () => {
@@ -90,6 +91,7 @@ export function useMarketResearchItems(filters: MarketResearchFilters) {
       if (!data.success) throw new Error('Failed to fetch research items');
       return data.data;
     },
+    refetchInterval: poll ? 5 * 1000 : false,
     staleTime: 30 * 1000,
   });
 }
