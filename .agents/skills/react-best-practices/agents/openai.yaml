@@ -1,0 +1,7 @@
+interface:
+  display_name: "Vercel React 품질"
+  short_description: "React 컴포넌트 성능·구조 점검"
+  brand_color: "#111827"
+  default_prompt: "Use $vercel-react-best-practices to review React components in this project."
+policy:
+  allow_implicit_invocation: false

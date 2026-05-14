@@ -19,6 +19,10 @@ import clientContractsRouter from "./routes/clientContracts.js";
 import servicesRouter from "./routes/services.js";
 import quotationsRouter from "./routes/quotations.js";
 import contractsRouter from "./routes/contracts.js";
+import marketResearchRouter from "./routes/marketResearch.js";
+import salesLeadsRouter from "./routes/salesLeads.js";
+import salesMaterialsRouter from "./routes/salesMaterials.js";
+import salesMessagesRouter from "./routes/salesMessages.js";
 
 dotenv.config();
 
@@ -43,6 +47,10 @@ app.use("/api/client-contracts", clientContractsRouter);
 app.use("/api/services", servicesRouter);
 app.use("/api/quotations", quotationsRouter);
 app.use("/api/contracts", contractsRouter);
+app.use("/api/market-research", marketResearchRouter);
+app.use("/api/sales-leads", salesLeadsRouter);
+app.use("/api/sales-materials", salesMaterialsRouter);
+app.use("/api/sales-messages", salesMessagesRouter);
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "createTree Office API is running" });

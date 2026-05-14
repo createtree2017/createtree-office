@@ -1,7 +1,5 @@
 {
-  "id": "541d690b-1543-4e88-a5ce-8dac1532c3b2",
-  "prevId": "a70c06d1-34d5-4b7d-b09a-e6b1596c129d",
-  "version": "6",
+  "version": "7",
   "dialect": "postgresql",
   "tables": {
     "public.clients": {
@@ -44,7 +42,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.form_submissions": {
       "name": "form_submissions",
@@ -85,7 +86,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.manuals": {
       "name": "manuals",
@@ -188,19 +192,22 @@
         "manuals_author_id_users_id_fk": {
           "name": "manuals_author_id_users_id_fk",
           "tableFrom": "manuals",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.task_responses": {
       "name": "task_responses",
@@ -258,32 +265,35 @@
         "task_responses_task_id_tasks_id_fk": {
           "name": "task_responses_task_id_tasks_id_fk",
           "tableFrom": "task_responses",
-          "tableTo": "tasks",
           "columnsFrom": [
             "task_id"
           ],
+          "tableTo": "tasks",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "task_responses_submitter_id_users_id_fk": {
           "name": "task_responses_submitter_id_users_id_fk",
           "tableFrom": "task_responses",
-          "tableTo": "users",
           "columnsFrom": [
             "submitter_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.task_templates": {
       "name": "task_templates",
@@ -339,19 +349,22 @@
         "task_templates_author_id_users_id_fk": {
           "name": "task_templates_author_id_users_id_fk",
           "tableFrom": "task_templates",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.tasks": {
       "name": "tasks",
@@ -439,58 +452,61 @@
         "tasks_assignee_id_users_id_fk": {
           "name": "tasks_assignee_id_users_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "users",
           "columnsFrom": [
             "assignee_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tasks_author_id_users_id_fk": {
           "name": "tasks_author_id_users_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tasks_template_id_task_templates_id_fk": {
           "name": "tasks_template_id_task_templates_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "task_templates",
           "columnsFrom": [
             "template_id"
           ],
+          "tableTo": "task_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tasks_client_id_clients_id_fk": {
           "name": "tasks_client_id_clients_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.users": {
       "name": "users",
@@ -567,27 +583,30 @@
         "users_client_id_clients_id_fk": {
           "name": "users_client_id_clients_id_fk",
           "tableFrom": "users",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {
@@ -622,8 +641,14 @@
   },
   "schemas": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "541d690b-1543-4e88-a5ce-8dac1532c3b2",
+  "prevId": "a70c06d1-34d5-4b7d-b09a-e6b1596c129d",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }

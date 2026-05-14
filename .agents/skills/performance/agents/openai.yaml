@@ -1,0 +1,7 @@
+interface:
+  display_name: "성능 최적화"
+  short_description: "로딩·번들·렌더링 성능 점검"
+  brand_color: "#16A34A"
+  default_prompt: "Use $performance to identify web performance bottlenecks."
+policy:
+  allow_implicit_invocation: false

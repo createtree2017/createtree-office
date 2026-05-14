@@ -15,6 +15,8 @@ import MonitoringPage from './pages/MonitoringPage';
 import ServiceProductsPage from './pages/ServiceProductsPage';
 import QuotationsPage from './pages/QuotationsPage';
 import ContractsPage from './pages/ContractsPage';
+import MarketResearchPage from './pages/MarketResearchPage';
+import SalesLeadsPage from './pages/SalesLeadsPage';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import NavBar from './components/NavBar';
@@ -60,6 +62,8 @@ function App() {
                         <Route path="/services" element={<ServiceProductsPage />} />
                         <Route path="/quotations" element={<QuotationsPage />} />
                         <Route path="/contracts" element={<ContractsPage />} />
+                        <Route path="/market-research" element={<MarketResearchPage />} />
+                        <Route path="/sales-leads" element={<SalesLeadsPage />} />
 
                         <Route path="/mypage" element={<MyPage />} />
                     </Route>

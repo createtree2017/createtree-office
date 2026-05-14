@@ -1,0 +1,6 @@
+interface:
+  display_name: "Office PDCA"
+  short_description: "Plan·Design·Devlog 문서화 기준"
+  default_prompt: "Use $office-pdca-workflow to plan and document CT_office work."
+policy:
+  allow_implicit_invocation: true

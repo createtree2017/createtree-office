@@ -172,6 +172,230 @@ export const notificationLogs = pgTable("notification_logs", {
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ===== 시장조사 / 영업관리 시스템 =====
+
+export const marketResearchRunStatusEnum = pgEnum("market_research_run_status", [
+    "pending",
+    "running",
+    "completed",
+    "partial_failed",
+    "failed",
+]);
+
+export const marketResearchBusinessTypeEnum = pgEnum("market_research_business_type", [
+    "obgyn",
+    "delivery_hospital",
+    "general_obgyn",
+    "women_hospital",
+    "postpartum_center",
+]);
+
+export const marketResearchOperationStatusEnum = pgEnum("market_research_operation_status", [
+    "operating",
+    "closed",
+    "newly_opened",
+    "unknown",
+]);
+
+export const marketResearchVerificationStatusEnum = pgEnum("market_research_verification_status", [
+    "auto_collected",
+    "needs_review",
+    "verified",
+    "manually_corrected",
+]);
+
+export const salesStatusEnum = pgEnum("sales_status", [
+    "not_contacted",
+    "material_allowed",
+    "material_sent",
+    "called",
+    "visit_scheduled",
+    "visited",
+    "meeting_scheduled",
+    "pilot_proposed",
+    "quotation_proposed",
+    "contracting",
+    "operating",
+    "closed",
+    "on_hold",
+    "rejected",
+    "unsubscribed",
+]);
+
+export const salesActivityTypeEnum = pgEnum("sales_activity_type", [
+    "email",
+    "call",
+    "sns",
+    "visit",
+    "meeting",
+    "feedback",
+    "memo",
+]);
+
+export const salesMessageStatusEnum = pgEnum("sales_message_status", [
+    "draft",
+    "blocked",
+    "queued",
+    "sent",
+    "failed",
+]);
+
+export const marketResearchRuns = pgTable("market_research_runs", {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    regionScope: text("region_scope").default("전국").notNull(),
+    regions: jsonb("regions").$type<string[]>().default([]),
+    businessTypes: jsonb("business_types").$type<string[]>().default([]),
+    operationStatuses: jsonb("operation_statuses").$type<string[]>().default([]),
+    sources: jsonb("sources").$type<string[]>().default([]),
+    status: marketResearchRunStatusEnum("status").default("pending").notNull(),
+    stats: jsonb("stats").$type<Record<string, any>>().default({}),
+    errorLog: jsonb("error_log").$type<any[]>().default([]),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const marketResearchItems = pgTable("market_research_items", {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id").references(() => marketResearchRuns.id, { onDelete: "set null" }),
+    stableKey: text("stable_key").notNull(),
+    businessType: marketResearchBusinessTypeEnum("business_type").notNull(),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    region: text("region").notNull(),
+    city: text("city"),
+    district: text("district"),
+    address: text("address"),
+    operationStatus: marketResearchOperationStatusEnum("operation_status").default("unknown").notNull(),
+    phone: text("phone"),
+    email: text("email"),
+    website: text("website"),
+    instagram: text("instagram"),
+    blog: text("blog"),
+    kakaoChannel: text("kakao_channel"),
+    naverTalk: text("naver_talk"),
+    openDate: date("open_date"),
+    closedDate: date("closed_date"),
+    isNew: boolean("is_new").default(false).notNull(),
+    hasUpdates: boolean("has_updates").default(false).notNull(),
+    isSelected: boolean("is_selected").default(false).notNull(),
+    isDeliveryHospital: boolean("is_delivery_hospital").default(false).notNull(),
+    deliveryCountYear: integer("delivery_count_year"),
+    deliveryCount: integer("delivery_count"),
+    deliveryCountSource: text("delivery_count_source"),
+    medicalDepartments: jsonb("medical_departments").$type<string[]>().default([]),
+    doctorCounts: jsonb("doctor_counts").$type<Record<string, number>>().default({}),
+    totalDoctorCount: integer("total_doctor_count"),
+    hasDeliveryCenter: boolean("has_delivery_center").default(false).notNull(),
+    hasFertilityCenter: boolean("has_fertility_center").default(false).notNull(),
+    hasPediatricLink: boolean("has_pediatric_link").default(false).notNull(),
+    roomCount: integer("room_count"),
+    motherCapacity: integer("mother_capacity"),
+    babyCapacity: integer("baby_capacity"),
+    roomGrades: jsonb("room_grades").$type<Array<{ grade: string; count?: number; price?: string }>>().default([]),
+    aestheticBrand: text("aesthetic_brand"),
+    additionalServices: jsonb("additional_services").$type<string[]>().default([]),
+    buildingScale: text("building_scale"),
+    occupiedFloors: text("occupied_floors"),
+    isStandaloneBuilding: boolean("is_standalone_building"),
+    parkingAvailable: boolean("parking_available"),
+    latitude: text("latitude"),
+    longitude: text("longitude"),
+    marketScore: integer("market_score").default(0).notNull(),
+    priorityGrade: text("priority_grade").default("C").notNull(),
+    sources: jsonb("sources").$type<string[]>().default([]),
+    sourceUrls: jsonb("source_urls").$type<string[]>().default([]),
+    sourceConfidence: text("source_confidence").default("needs_review").notNull(),
+    verificationStatus: marketResearchVerificationStatusEnum("verification_status").default("auto_collected").notNull(),
+    rawData: jsonb("raw_data").$type<Record<string, any>>().default({}),
+    memo: text("memo"),
+    lastResearchedAt: timestamp("last_researched_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const marketResearchChangeLogs = pgTable("market_research_change_logs", {
+    id: serial("id").primaryKey(),
+    itemId: integer("item_id").references(() => marketResearchItems.id, { onDelete: "cascade" }).notNull(),
+    runId: integer("run_id").references(() => marketResearchRuns.id, { onDelete: "set null" }),
+    fieldName: text("field_name").notNull(),
+    previousValue: text("previous_value"),
+    newValue: text("new_value"),
+    detectedAt: timestamp("detected_at").defaultNow().notNull(),
+});
+
+export const salesLeads = pgTable("sales_leads", {
+    id: serial("id").primaryKey(),
+    marketResearchItemId: integer("market_research_item_id").references(() => marketResearchItems.id, { onDelete: "cascade" }).notNull(),
+    clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+    status: salesStatusEnum("status").default("not_contacted").notNull(),
+    ownerId: integer("owner_id").references(() => users.id, { onDelete: "set null" }),
+    selectedBy: integer("selected_by").references(() => users.id, { onDelete: "set null" }),
+    selectedAt: timestamp("selected_at").defaultNow().notNull(),
+    contactConsentStatus: text("contact_consent_status").default("unknown").notNull(),
+    contactPerson: text("contact_person"),
+    contactRole: text("contact_role"),
+    nextAction: text("next_action"),
+    nextActionDate: timestamp("next_action_date"),
+    notes: text("notes"),
+    isArchived: boolean("is_archived").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const salesActivities = pgTable("sales_activities", {
+    id: serial("id").primaryKey(),
+    salesLeadId: integer("sales_lead_id").references(() => salesLeads.id, { onDelete: "cascade" }).notNull(),
+    activityType: salesActivityTypeEnum("activity_type").notNull(),
+    activityDate: timestamp("activity_date").defaultNow().notNull(),
+    channel: text("channel"),
+    subject: text("subject"),
+    content: text("content"),
+    outcome: text("outcome"),
+    nextAction: text("next_action"),
+    nextActionDate: timestamp("next_action_date"),
+    attachments: jsonb("attachments").$type<any[]>().default([]),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const salesMaterials = pgTable("sales_materials", {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    materialType: text("material_type").default("company_intro").notNull(),
+    description: text("description"),
+    driveFileId: text("drive_file_id"),
+    driveFileName: text("drive_file_name"),
+    driveWebViewLink: text("drive_web_view_link"),
+    externalUrl: text("external_url"),
+    version: text("version").default("v1").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const salesMessages = pgTable("sales_messages", {
+    id: serial("id").primaryKey(),
+    salesLeadId: integer("sales_lead_id").references(() => salesLeads.id, { onDelete: "cascade" }).notNull(),
+    channel: text("channel").default("resend").notNull(),
+    recipients: jsonb("recipients").$type<string[]>().default([]),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    materialIds: jsonb("material_ids").$type<number[]>().default([]),
+    status: salesMessageStatusEnum("status").default("draft").notNull(),
+    blockedReason: text("blocked_reason"),
+    providerMessageId: text("provider_message_id"),
+    errorMessage: text("error_message"),
+    sentAt: timestamp("sent_at"),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ===== 서비스 상품 마스터 시스템 =====
 
 export const billingTypeEnum = pgEnum("billing_type", [

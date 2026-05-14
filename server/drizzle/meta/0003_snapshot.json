@@ -1,7 +1,5 @@
 {
-  "id": "a1586850-6a93-40cd-b2d2-75be47823c9d",
-  "prevId": "541d690b-1543-4e88-a5ce-8dac1532c3b2",
-  "version": "6",
+  "version": "7",
   "dialect": "postgresql",
   "tables": {
     "public.client_service_contracts": {
@@ -45,32 +43,35 @@
         "client_service_contracts_client_id_clients_id_fk": {
           "name": "client_service_contracts_client_id_clients_id_fk",
           "tableFrom": "client_service_contracts",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "client_service_contracts_template_id_task_templates_id_fk": {
           "name": "client_service_contracts_template_id_task_templates_id_fk",
           "tableFrom": "client_service_contracts",
-          "tableTo": "task_templates",
           "columnsFrom": [
             "template_id"
           ],
+          "tableTo": "task_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.clients": {
       "name": "clients",
@@ -179,7 +180,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.contract_discount_policies": {
       "name": "contract_discount_policies",
@@ -241,7 +245,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.contracts": {
       "name": "contracts",
@@ -381,53 +388,56 @@
         "contracts_quotation_id_quotations_id_fk": {
           "name": "contracts_quotation_id_quotations_id_fk",
           "tableFrom": "contracts",
-          "tableTo": "quotations",
           "columnsFrom": [
             "quotation_id"
           ],
+          "tableTo": "quotations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "contracts_client_id_clients_id_fk": {
           "name": "contracts_client_id_clients_id_fk",
           "tableFrom": "contracts",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "contracts_created_by_users_id_fk": {
           "name": "contracts_created_by_users_id_fk",
           "tableFrom": "contracts",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "contracts_contract_number_unique": {
           "name": "contracts_contract_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "contract_number"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.form_submissions": {
       "name": "form_submissions",
@@ -468,7 +478,10 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.manuals": {
       "name": "manuals",
@@ -571,19 +584,22 @@
         "manuals_author_id_users_id_fk": {
           "name": "manuals_author_id_users_id_fk",
           "tableFrom": "manuals",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.monitoring_results": {
       "name": "monitoring_results",
@@ -690,45 +706,48 @@
         "monitoring_results_template_id_monitoring_templates_id_fk": {
           "name": "monitoring_results_template_id_monitoring_templates_id_fk",
           "tableFrom": "monitoring_results",
-          "tableTo": "monitoring_templates",
           "columnsFrom": [
             "template_id"
           ],
+          "tableTo": "monitoring_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "monitoring_results_client_id_clients_id_fk": {
           "name": "monitoring_results_client_id_clients_id_fk",
           "tableFrom": "monitoring_results",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "monitoring_results_created_by_users_id_fk": {
           "name": "monitoring_results_created_by_users_id_fk",
           "tableFrom": "monitoring_results",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.monitoring_templates": {
       "name": "monitoring_templates",
@@ -884,32 +903,35 @@
         "monitoring_templates_client_id_clients_id_fk": {
           "name": "monitoring_templates_client_id_clients_id_fk",
           "tableFrom": "monitoring_templates",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "monitoring_templates_created_by_users_id_fk": {
           "name": "monitoring_templates_created_by_users_id_fk",
           "tableFrom": "monitoring_templates",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.notification_logs": {
       "name": "notification_logs",
@@ -985,45 +1007,48 @@
         "notification_logs_client_id_clients_id_fk": {
           "name": "notification_logs_client_id_clients_id_fk",
           "tableFrom": "notification_logs",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "notification_logs_template_id_monitoring_templates_id_fk": {
           "name": "notification_logs_template_id_monitoring_templates_id_fk",
           "tableFrom": "notification_logs",
-          "tableTo": "monitoring_templates",
           "columnsFrom": [
             "template_id"
           ],
+          "tableTo": "monitoring_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "notification_logs_result_id_monitoring_results_id_fk": {
           "name": "notification_logs_result_id_monitoring_results_id_fk",
           "tableFrom": "notification_logs",
-          "tableTo": "monitoring_results",
           "columnsFrom": [
             "result_id"
           ],
+          "tableTo": "monitoring_results",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.quotation_items": {
       "name": "quotation_items",
@@ -1142,32 +1167,35 @@
         "quotation_items_quotation_id_quotations_id_fk": {
           "name": "quotation_items_quotation_id_quotations_id_fk",
           "tableFrom": "quotation_items",
-          "tableTo": "quotations",
           "columnsFrom": [
             "quotation_id"
           ],
+          "tableTo": "quotations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "quotation_items_service_id_services_id_fk": {
           "name": "quotation_items_service_id_services_id_fk",
           "tableFrom": "quotation_items",
-          "tableTo": "services",
           "columnsFrom": [
             "service_id"
           ],
+          "tableTo": "services",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.quotation_service_configs": {
       "name": "quotation_service_configs",
@@ -1247,32 +1275,35 @@
         "quotation_service_configs_quotation_id_quotations_id_fk": {
           "name": "quotation_service_configs_quotation_id_quotations_id_fk",
           "tableFrom": "quotation_service_configs",
-          "tableTo": "quotations",
           "columnsFrom": [
             "quotation_id"
           ],
+          "tableTo": "quotations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "quotation_service_configs_service_id_services_id_fk": {
           "name": "quotation_service_configs_service_id_services_id_fk",
           "tableFrom": "quotation_service_configs",
-          "tableTo": "services",
           "columnsFrom": [
             "service_id"
           ],
+          "tableTo": "services",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.quotations": {
       "name": "quotations",
@@ -1395,53 +1426,56 @@
         "quotations_client_id_clients_id_fk": {
           "name": "quotations_client_id_clients_id_fk",
           "tableFrom": "quotations",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "quotations_discount_policy_id_contract_discount_policies_id_fk": {
           "name": "quotations_discount_policy_id_contract_discount_policies_id_fk",
           "tableFrom": "quotations",
-          "tableTo": "contract_discount_policies",
           "columnsFrom": [
             "discount_policy_id"
           ],
+          "tableTo": "contract_discount_policies",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "quotations_created_by_users_id_fk": {
           "name": "quotations_created_by_users_id_fk",
           "tableFrom": "quotations",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "quotations_quotation_number_unique": {
           "name": "quotations_quotation_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "quotation_number"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.service_item_prices": {
       "name": "service_item_prices",
@@ -1484,32 +1518,35 @@
         "service_item_prices_item_id_service_items_id_fk": {
           "name": "service_item_prices_item_id_service_items_id_fk",
           "tableFrom": "service_item_prices",
-          "tableTo": "service_items",
           "columnsFrom": [
             "item_id"
           ],
+          "tableTo": "service_items",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "service_item_prices_tier_id_service_tiers_id_fk": {
           "name": "service_item_prices_tier_id_service_tiers_id_fk",
           "tableFrom": "service_item_prices",
-          "tableTo": "service_tiers",
           "columnsFrom": [
             "tier_id"
           ],
+          "tableTo": "service_tiers",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.service_items": {
       "name": "service_items",
@@ -1586,19 +1623,22 @@
         "service_items_service_id_services_id_fk": {
           "name": "service_items_service_id_services_id_fk",
           "tableFrom": "service_items",
-          "tableTo": "services",
           "columnsFrom": [
             "service_id"
           ],
+          "tableTo": "services",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.service_tiers": {
       "name": "service_tiers",
@@ -1667,19 +1707,22 @@
         "service_tiers_service_id_services_id_fk": {
           "name": "service_tiers_service_id_services_id_fk",
           "tableFrom": "service_tiers",
-          "tableTo": "services",
           "columnsFrom": [
             "service_id"
           ],
+          "tableTo": "services",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.services": {
       "name": "services",
@@ -1762,27 +1805,30 @@
         "services_linked_task_template_id_task_templates_id_fk": {
           "name": "services_linked_task_template_id_task_templates_id_fk",
           "tableFrom": "services",
-          "tableTo": "task_templates",
           "columnsFrom": [
             "linked_task_template_id"
           ],
+          "tableTo": "task_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "services_slug_unique": {
           "name": "services_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.task_responses": {
       "name": "task_responses",
@@ -1840,32 +1886,35 @@
         "task_responses_task_id_tasks_id_fk": {
           "name": "task_responses_task_id_tasks_id_fk",
           "tableFrom": "task_responses",
-          "tableTo": "tasks",
           "columnsFrom": [
             "task_id"
           ],
+          "tableTo": "tasks",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "task_responses_submitter_id_users_id_fk": {
           "name": "task_responses_submitter_id_users_id_fk",
           "tableFrom": "task_responses",
-          "tableTo": "users",
           "columnsFrom": [
             "submitter_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.task_templates": {
       "name": "task_templates",
@@ -1921,19 +1970,22 @@
         "task_templates_author_id_users_id_fk": {
           "name": "task_templates_author_id_users_id_fk",
           "tableFrom": "task_templates",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.tasks": {
       "name": "tasks",
@@ -2021,58 +2073,61 @@
         "tasks_assignee_id_users_id_fk": {
           "name": "tasks_assignee_id_users_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "users",
           "columnsFrom": [
             "assignee_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "tasks_author_id_users_id_fk": {
           "name": "tasks_author_id_users_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "users",
           "columnsFrom": [
             "author_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "tasks_template_id_task_templates_id_fk": {
           "name": "tasks_template_id_task_templates_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "task_templates",
           "columnsFrom": [
             "template_id"
           ],
+          "tableTo": "task_templates",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "tasks_client_id_clients_id_fk": {
           "name": "tasks_client_id_clients_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
     "public.users": {
       "name": "users",
@@ -2149,27 +2204,30 @@
         "users_client_id_clients_id_fk": {
           "name": "users_client_id_clients_id_fk",
           "tableFrom": "users",
-          "tableTo": "clients",
           "columnsFrom": [
             "client_id"
           ],
+          "tableTo": "clients",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {
@@ -2275,8 +2333,14 @@
   },
   "schemas": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "a1586850-6a93-40cd-b2d2-75be47823c9d",
+  "prevId": "541d690b-1543-4e88-a5ce-8dac1532c3b2",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }

@@ -1,0 +1,7 @@
+interface:
+  display_name: "접근성 점검"
+  short_description: "WCAG·키보드·폼 접근성 점검"
+  brand_color: "#7C3AED"
+  default_prompt: "Use $accessibility to audit keyboard, form, and screen reader accessibility."
+policy:
+  allow_implicit_invocation: false

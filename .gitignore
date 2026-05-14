@@ -6,6 +6,8 @@ node_modules
 # Testing
 coverage
 /tmp/
+__pycache__/
+*.py[cod]
 
 # Production
 dist

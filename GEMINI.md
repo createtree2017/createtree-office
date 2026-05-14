@@ -297,6 +297,43 @@ docs/
 
 ---
 
+## 5.5 Codex 스킬 운영 자동화
+
+### 스킬 위치와 목록
+
+- Codex repo-local 스킬은 `.agents/skills/`에 둔다.
+- 설치된 스킬의 한눈에 보는 목록은 `.agents/skills/SKILLS_INDEX.md`이다.
+- 이 목록은 직접 편집하지 않고 `npm run skills:sync`로 재생성한다.
+- 스킬 구조와 목록 최신성은 `npm run skills:check`로 검증한다.
+- `npm run verify`는 스킬 검증과 기존 빌드를 함께 수행한다.
+- 자동 호출은 `createtree-office-ops`, `office-drizzle-guardian`, `office-tiptap-richtext`, `office-pdca-workflow`, `office-google-workspace`, `office-pdf-contracts` 같은 프로젝트 전용 핵심 스킬만 기본값으로 둔다.
+- 공통 품질 스킬은 컨텍스트와 속도 보호를 위해 `$스킬명`으로 명시 호출할 때만 사용한다.
+
+### 자동 Skill Impact Check
+
+기능 개발, 기존 기능 변경, 업데이트 완료 시 AI는 아래 항목을 자동 확인한다.
+
+1. 반복 작업 규칙이나 새 사내 운영 흐름이 생겼는가?
+2. API, DB, 컴포넌트, 검증 명령, 문서 위치가 바뀌었는가?
+3. 기존 스킬 설명이 현재 코드와 달라졌는가?
+4. 새 기능이 향후 반복 개발될 가능성이 큰가?
+
+하나라도 해당하면 관련 스킬을 업데이트하고 `npm run skills:sync` 및 `npm run skills:check`를 실행한다.
+
+### 사용자 확인이 필요한 운영 정책 변경
+
+아래 변경은 AI가 자동 반영하지 않고 사용자 확인 후 스킬에 반영한다.
+
+- 배포/인프라 기준 변경
+- 운영 DB 접근 원칙 변경
+- 개인정보/보안 기준 변경
+- 의료광고/법무 표현 기준 변경
+- AI provider/model 운영 기준 변경
+- 금전/계약/영업 데이터 기준 변경
+- 스킬 자동화 권한, `!!승인!!`, `!!푸시!!`, `!!테스트!!` 규칙 변경
+
+---
+
 ## 6. 응답 규칙
 
 ### 작업 보고 시

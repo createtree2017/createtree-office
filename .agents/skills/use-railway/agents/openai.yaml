@@ -1,0 +1,7 @@
+interface:
+  display_name: "Railway 운영"
+  short_description: "Railway 배포·환경변수·장애 점검"
+  brand_color: "#6D28D9"
+  default_prompt: "Use $use-railway to check Railway deployment and environment configuration."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Office Tiptap"
+  short_description: "리치 텍스트 저장·렌더링 보호 규칙"
+  default_prompt: "Use $office-tiptap-richtext to modify CT_office manual editor behavior safely."
+policy:
+  allow_implicit_invocation: true
