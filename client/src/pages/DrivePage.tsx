@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Image as ImageIcon, File, Calendar, ExternalLink, Loader2, FolderOpen, Folder, ArrowLeft, X, Download, Search } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { useDriveFiles } from '../hooks/useDriveFiles';
 
 interface DriveFile {
@@ -281,8 +280,8 @@ const DrivePage = () => {
                     }
 
                     let downloadUrl: string | null = `https://drive.google.com/uc?export=download&id=${viewerFile.id}`;
-                    let downloadText = "다운로드";
-                    let ActionIcon = Download;
+                    const downloadText = "다운로드";
+                    const ActionIcon = Download;
 
                     // 구글 워크스페이스 문서 다운로드 처리 분기
                     if (mime === 'application/vnd.google-apps.document') {

@@ -31,10 +31,6 @@ const ACTIVITY_TYPES = [
     { value: 'memo', label: '메모' },
 ];
 
-function salesStatusLabel(value?: string | null) {
-    return SALES_STATUSES.find(item => item.value === value)?.label || value || '-';
-}
-
 function businessLabel(value?: string | null) {
     const labels: Record<string, string> = {
         delivery_hospital: '분만병원',

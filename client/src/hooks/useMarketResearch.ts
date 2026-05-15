@@ -7,6 +7,9 @@ export interface MarketResearchFilters {
   region?: string;
   operationStatus?: string;
   flag?: string;
+  view?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface MarketResearchItem {
@@ -31,6 +34,9 @@ export interface MarketResearchItem {
   medicalDepartments?: string[];
   doctorCounts?: Record<string, number>;
   totalDoctorCount?: number | null;
+  hasDeliveryCenter?: boolean;
+  hasFertilityCenter?: boolean;
+  hasPediatricLink?: boolean;
   roomCount?: number | null;
   roomGrades?: Array<{ grade: string; count?: number; price?: string }>;
   aestheticBrand?: string | null;
@@ -41,6 +47,7 @@ export interface MarketResearchItem {
   priorityGrade: string;
   sourceConfidence: string;
   verificationStatus: string;
+  rawData?: Record<string, any>;
   memo?: string | null;
   lastResearchedAt: string;
   salesLeadId?: number | null;
@@ -61,10 +68,37 @@ export interface MarketResearchRun {
   createdAt: string;
 }
 
+export interface MarketResearchSummary {
+  total: number;
+  selected: number;
+  newItems: number;
+  updated: number;
+  deliveryCandidates: number;
+  closed: number;
+  verifiedObgyn: number;
+  detailCandidates: number;
+}
+
+export interface MarketResearchItemsResult {
+  items: MarketResearchItem[];
+  meta: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}
+
+type PaginatedApiResponse<T> = ApiResponse<T> & {
+  meta?: MarketResearchItemsResult['meta'];
+};
+
 function toQuery(filters: MarketResearchFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    if (value && value !== 'all') params.set(key, value);
+    if (value !== undefined && value !== null && value !== '' && (value !== 'all' || key === 'view')) {
+      params.set(key, String(value));
+    }
   });
   const query = params.toString();
   return query ? `?${query}` : '';
@@ -87,8 +121,30 @@ export function useMarketResearchItems(filters: MarketResearchFilters, poll = fa
   return useQuery({
     queryKey: ['market-research-items', filters],
     queryFn: async () => {
-      const data = await apiFetch<ApiResponse<MarketResearchItem[]>>(`/api/market-research/items${toQuery(filters)}`);
+      const data = await apiFetch<PaginatedApiResponse<MarketResearchItem[]>>(`/api/market-research/items${toQuery(filters)}`);
       if (!data.success) throw new Error('Failed to fetch research items');
+      return {
+        items: data.data,
+        meta: data.meta || {
+          total: data.data.length,
+          page: filters.page || 1,
+          pageSize: filters.pageSize || data.data.length,
+          totalPages: 1,
+        },
+      };
+    },
+    refetchInterval: poll ? 5 * 1000 : false,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useMarketResearchSummary(filters: MarketResearchFilters, poll = false) {
+  const { page: _page, pageSize: _pageSize, ...summaryFilters } = filters;
+  return useQuery({
+    queryKey: ['market-research-summary', summaryFilters],
+    queryFn: async () => {
+      const data = await apiFetch<ApiResponse<MarketResearchSummary>>(`/api/market-research/summary${toQuery(summaryFilters)}`);
+      if (!data.success) throw new Error('Failed to fetch research summary');
       return data.data;
     },
     refetchInterval: poll ? 5 * 1000 : false,
@@ -110,6 +166,7 @@ export function useCreateMarketResearchRun() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['market-research-runs'] });
       queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
+      queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
     },
   });
 }
@@ -125,7 +182,35 @@ export function useUpdateMarketResearchItem() {
       if (!data.success) throw new Error(data.message || '시장조사 항목 수정 실패');
       return data.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['market-research-items'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
+      queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
+    },
+  });
+}
+
+export async function fetchMarketResearchItemIds(filters: MarketResearchFilters) {
+  const data = await apiFetch<ApiResponse<number[]>>(`/api/market-research/items/ids${toQuery(filters)}`);
+  if (!data.success) throw new Error(data.message || '시장조사 항목 선택 실패');
+  return data.data;
+}
+
+export function useBatchSelectMarketResearchItems() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      const data = await apiFetch<ApiResponse<{ selected: number }>>('/api/market-research/items/select-batch', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      });
+      if (!data.success) throw new Error(data.message || '영업선택 일괄 저장 실패');
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
+      queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-leads'] });
+    },
   });
 }
 
@@ -139,6 +224,7 @@ export function useSelectMarketResearchItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
+      queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
       queryClient.invalidateQueries({ queryKey: ['sales-leads'] });
     },
   });
@@ -154,6 +240,7 @@ export function useUnselectMarketResearchItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
+      queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
       queryClient.invalidateQueries({ queryKey: ['sales-leads'] });
     },
   });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, User, Clock, Trash2, Edit3, X } from 'lucide-react';
 import CreateTaskModal from './CreateTaskModal';

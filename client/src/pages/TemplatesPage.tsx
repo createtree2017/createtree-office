@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Play, Pencil, RefreshCw, Square, LayoutTemplate } from 'lucide-react';
-import { TemplateFormModal, MonitoringTemplate, MonitoringClient } from './MonitoringPage';
+import { Plus, Trash2, Save, MoveUp, MoveDown, FileText, CheckSquare, Edit, Activity, Pencil, RefreshCw, Square } from 'lucide-react';
+import { TemplateFormModal, MonitoringTemplate } from './MonitoringPage';
 import SubNav from '../components/SubNav';
 import ClientFilter from '../components/ClientFilter';
 

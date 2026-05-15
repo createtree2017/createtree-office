@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import ManualEditor from '../components/ManualEditor';
 import CreateManualModal from '../components/CreateManualModal';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 import toast from 'react-hot-toast';
 import { ChevronRight, ChevronDown, Folder, FileText, Plus, Home, ChevronRight as ChevronRightIcon, MoreHorizontal, Trash2, Pencil, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -19,6 +19,8 @@ interface Manual {
     order: number;
     googleFormId?: string | null;
 }
+
+const getToken = () => localStorage.getItem('token');
 
 const ManualsPage = () => {
     const { id } = useParams();
@@ -36,8 +38,6 @@ const ManualsPage = () => {
     const user = userStr ? JSON.parse(userStr) : null;
     const roles = ["USER", "MANAGER", "ADMIN"];
     const canManage = user && (user.role === 'ADMIN' || user.role === 'MANAGER');
-
-    const getToken = () => localStorage.getItem('token');
 
     // === TanStack Query 기반 데이터 페칭 ===
     const queryClient = useQueryClient();
@@ -60,7 +60,7 @@ const ManualsPage = () => {
     // fetchManuals 대체 래퍼
     const fetchManuals = () => queryClient.invalidateQueries({ queryKey: ['manuals'] });
 
-    const fetchDetail = async (manualId: string) => {
+    const fetchDetail = useCallback(async (manualId: string) => {
         setLoading(true);
         try {
             const response = await fetch(`/api/manuals/${manualId}`, {
@@ -75,7 +75,7 @@ const ManualsPage = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
 
 
@@ -86,7 +86,7 @@ const ManualsPage = () => {
             setLoading(false);
             setCurrentManual(null);
         }
-    }, [id]);
+    }, [id, fetchDetail]);
 
     // 컨텍스트 메뉴 외부 클릭 시 닫기
     useEffect(() => {
@@ -240,7 +240,7 @@ const ManualsPage = () => {
 
     // 드래그로 순서 변경
     const handleReorder = async (result: DropResult) => {
-        const { destination, source, draggableId } = result;
+        const { destination, source } = result;
         if (!destination) return;
         if (destination.droppableId !== source.droppableId) return; // 같은 레벨만
         if (destination.index === source.index) return;
@@ -267,7 +267,6 @@ const ManualsPage = () => {
 
         // API에 변경된 항목들 저장
         const token = getToken();
-        const changedItems = updatedOrders.filter((m, i) => siblings[i]?.id !== m.id);
         try {
             await Promise.all(
                 updatedOrders.map((m, i) =>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 import toast from 'react-hot-toast';
-import { FileText, Folder, Smile } from 'lucide-react';
+import { FileText, Folder } from 'lucide-react';
 
 interface CreateManualModalProps {
     onSuccess: () => void;

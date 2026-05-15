@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
-  Plus,
   Play,
   Trash2,
   FileDown,
@@ -14,9 +13,7 @@ import {
   Minus,
   X,
   Eye,
-  Clock,
   AlertCircle,
-  Pencil,
   Square,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -84,8 +81,6 @@ const MonitoringPage = () => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [reportResultId, setReportResultId] = useState<number | null>(null);
@@ -102,7 +97,7 @@ const MonitoringPage = () => {
 
   // === TanStack Query 기반 데이터 페칭 ===
   const queryClient = useQueryClient();
-  const { data: templatesData = [], isLoading: templatesLoading } = useQuery({
+  const { data: templatesData = [] } = useQuery({
     queryKey: ['monitoring-templates'],
     queryFn: async () => {
       const res = await fetch(`${API}/templates`, { headers: getHeaders() });
@@ -112,7 +107,7 @@ const MonitoringPage = () => {
     },
     staleTime: 30 * 1000,
   });
-  const { data: resultsData = [], isLoading: resultsLoading } = useQuery({
+  const { data: resultsData = [] } = useQuery({
     queryKey: ['monitoring-results'],
     queryFn: async () => {
       const res = await fetch(`${API}/results`, { headers: getHeaders() });
@@ -122,7 +117,7 @@ const MonitoringPage = () => {
     },
     staleTime: 30 * 1000,
   });
-  const { data: clientsData = [], isLoading: clientsLoading } = useQuery({
+  const { data: clientsData = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
       const res = await fetch('/api/clients', { headers: getHeaders() });
@@ -132,8 +127,6 @@ const MonitoringPage = () => {
     },
     staleTime: 5 * 60 * 1000,
   });
-  const loading = templatesLoading || resultsLoading || clientsLoading;
-
   // 캠시 데이터 → 로컬 state 동기화 (기존 코드와의 호환성)
   useEffect(() => { setTemplates(templatesData); }, [templatesData]);
   useEffect(() => { setResults(resultsData); }, [resultsData]);
@@ -202,22 +195,6 @@ const MonitoringPage = () => {
       s.delete(templateId);
       return s;
     });
-  };
-
-  const deleteTemplate = async (id: number) => {
-    if (!confirm("이 템플릿과 관련 결과를 모두 삭제하시겠습니까?")) return;
-    try {
-      const res = await fetch(`${API}/templates/${id}`, {
-        method: "DELETE",
-        headers: getHeaders(),
-      });
-      if ((await res.json()).success) {
-        toast.success("삭제 완료");
-        fetchData();
-      }
-    } catch {
-      toast.error("삭제 실패");
-    }
   };
 
   // 자동 실행 토글 (중단/시작)
@@ -332,12 +309,6 @@ const MonitoringPage = () => {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedResultIds.size === results.length)
-      setSelectedResultIds(new Set());
-    else setSelectedResultIds(new Set(results.map((r) => r.id)));
   };
 
   const viewReportInModal = async (resultId: number) => {
@@ -1091,7 +1062,7 @@ export const TemplateFormModal = ({
   const [collectCount, setCollectCount] = useState(
     template?.collectCount || 10,
   );
-  const [isActive, setIsActive] = useState(template?.isActive ?? true);
+  const [isActive] = useState(template?.isActive ?? true);
   const [saving, setSaving] = useState(false);
   const [keywordsStr, setKeywordsStr] = useState(
     template?.keywords?.join(", ") || "",

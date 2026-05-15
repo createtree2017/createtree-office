@@ -11,6 +11,8 @@ export interface MarketResearchCollectOptions {
     regions?: string[];
     businessTypes?: string[];
     operationStatuses?: string[];
+    queryName?: string;
+    onProgress?: (stats: MarketResearchProgressStats) => Promise<void> | void;
 }
 
 export interface MarketResearchCollectResult {
@@ -19,22 +21,45 @@ export interface MarketResearchCollectResult {
     errors: Array<{ source: string; message: string }>;
 }
 
+export interface MarketResearchProgressStats {
+    stage: string;
+    processed?: number;
+    total?: number;
+    hiraBaseCount?: number;
+    hiraDetailProcessed?: number;
+    equipmentProcessed?: number;
+    deliveryCandidateCount?: number;
+    naverProcessed?: number;
+    inserted?: number;
+    updated?: number;
+    changed?: number;
+    errors?: number;
+    [key: string]: any;
+}
+
 const DEFAULT_SOURCES = [
     "HIRA 병원정보서비스",
     "HIRA 요양기관개폐업정보서비스",
     "행정안전부 지방행정 인허가/조회서비스",
     "보건복지부 산후조리원 현황",
     "KOSIS/주민등록 출생통계",
-    "Google Places",
     "공식 홈페이지/SNS",
 ];
 
 const HIRA_HOSPITAL_ENDPOINT = "https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList";
-const GOOGLE_PLACES_TEXT_SEARCH_ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
+const HIRA_DETAIL_ENDPOINT = "https://apis.data.go.kr/B551182/MadmDtlInfoService2.7";
+const NAVER_LOCAL_SEARCH_ENDPOINT = "https://openapi.naver.com/v1/search/local.json";
 const OBGYN_DEPARTMENT_CODE = "10";
+const PEDIATRICS_DEPARTMENT_CODE = "11";
 const DEFAULT_HIRA_ROWS_PER_PAGE = 100;
 const DEFAULT_HIRA_MAX_ROWS = 10000;
-const DEFAULT_GOOGLE_PLACES_LIMIT = 50;
+const DEFAULT_NAVER_LOCAL_LIMIT = 10000;
+const DEFAULT_HIRA_DETAIL_LIMIT = 3000;
+const DEFAULT_NAVER_DELAY_MS = 350;
+const DEFAULT_NAVER_RETRY_DELAY_MS = 2000;
+const DEFAULT_NAVER_MAX_RETRIES = 3;
+const NAVER_OBGYN_CATEGORY = "병원,의원>산부인과";
+const DETAIL_CANDIDATE_NAME_KEYWORDS = ["여성병원", "산부인과병원", "산부인과", "미즈", "우먼", "모아", "맘", "아이"];
 
 const HIRA_SIDO_CODES: Record<string, string> = {
     서울: "110000",
@@ -78,17 +103,45 @@ interface HiraHospitalRow {
     [key: string]: string | undefined;
 }
 
-interface GooglePlace {
-    id?: string;
-    displayName?: { text?: string; languageCode?: string };
-    formattedAddress?: string;
-    nationalPhoneNumber?: string;
-    internationalPhoneNumber?: string;
-    websiteUri?: string;
-    googleMapsUri?: string;
-    businessStatus?: string;
-    location?: { latitude?: number; longitude?: number };
-    types?: string[];
+interface HiraDetailRow {
+    dgsbjtCd?: string;
+    dgsbjtCdNm?: string;
+    dgsbjtNm?: string;
+    drCnt?: string;
+    chrgDrCnt?: string;
+    slctnDrCnt?: string;
+    equipCd?: string;
+    equipCdNm?: string;
+    eqpCd?: string;
+    eqpCdNm?: string;
+    equipCnt?: string;
+    eqpCnt?: string;
+    [key: string]: string | undefined;
+}
+
+interface NaverLocalItem {
+    title?: string;
+    link?: string;
+    category?: string;
+    description?: string;
+    telephone?: string;
+    address?: string;
+    roadAddress?: string;
+    mapx?: string;
+    mapy?: string;
+}
+
+interface DeliveryCandidateSignals {
+    naverCategoryMatched: boolean;
+    nameKeywordMatched: boolean;
+    detailedResearchEligible: boolean;
+    obgynDoctorCount: number;
+    pediatricDoctorCount: number;
+    incubatorCount: number;
+    deliveryMonitorCount: number;
+    score: number;
+    grade: "strong_candidate" | "candidate" | "review" | "low_priority";
+    evidence: string[];
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -110,9 +163,50 @@ function toInt(value: string | null | undefined): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+function stripHtml(value: string | null | undefined): string {
+    return (value || "")
+        .replace(/<[^>]*>/g, "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .trim();
+}
+
+function firstString(row: Record<string, string | undefined>, keys: string[]): string | null {
+    for (const key of keys) {
+        const value = row[key];
+        if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+    }
+    return null;
+}
+
+function firstInt(row: Record<string, string | undefined>, keys: string[]): number | null {
+    for (const key of keys) {
+        const value = toInt(row[key]);
+        if (value !== null) return value;
+    }
+    return null;
+}
+
 function getEnvInt(name: string, fallback: number): number {
     const parsed = parseInt(process.env[name] || "", 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function reportProgress(options: MarketResearchCollectOptions, stats: MarketResearchProgressStats) {
+    if (options.onProgress) await options.onProgress(stats);
+}
+
+function getRetryDelayMs(baseDelayMs: number, attempt: number): number {
+    const exponential = baseDelayMs * Math.pow(2, attempt);
+    const jitter = Math.floor(Math.random() * Math.min(500, Math.max(baseDelayMs, 1)));
+    return exponential + jitter;
 }
 
 function decodeXml(value: string): string {
@@ -145,6 +239,10 @@ function parseHiraItems(xml: string): HiraHospitalRow[] {
     });
 }
 
+function parseHiraDetailItems(xml: string): HiraDetailRow[] {
+    return parseHiraItems(xml) as HiraDetailRow[];
+}
+
 function getHiraTotalCount(xml: string): number {
     return toInt(getXmlTag(xml, "totalCount")) || 0;
 }
@@ -168,6 +266,11 @@ function buildHiraUrl(serviceKey: string, params: Record<string, string | number
     }
     const queryString = query.toString();
     return `${HIRA_HOSPITAL_ENDPOINT}?ServiceKey=${buildPublicDataServiceKeyParam(serviceKey)}${queryString ? `&${queryString}` : ""}`;
+}
+
+function buildHiraDetailUrl(serviceKey: string, operation: string, ykiho: string): string {
+    const query = new URLSearchParams({ ykiho, pageNo: "1", numOfRows: "100" });
+    return `${HIRA_DETAIL_ENDPOINT}/${operation}?ServiceKey=${buildPublicDataServiceKeyParam(serviceKey)}&${query.toString()}`;
 }
 
 function splitAddress(address: string | null | undefined): { region: string; city: string | null; district: string | null } {
@@ -196,10 +299,39 @@ function inferHospitalBusinessType(row: HiraHospitalRow): BusinessType {
     return "general_obgyn";
 }
 
+function hasDetailCandidateNameKeyword(name: string | null | undefined): boolean {
+    const normalized = normalizeText(name);
+    return DETAIL_CANDIDATE_NAME_KEYWORDS.some((keyword) => normalized.includes(normalizeText(keyword)));
+}
+
+function isNaverObgynCategory(category: string | null | undefined): boolean {
+    return normalizeText(category).includes(normalizeText(NAVER_OBGYN_CATEGORY));
+}
+
+function getRawData(item: NewMarketResearchItem): Record<string, any> {
+    return (item.rawData && typeof item.rawData === "object") ? item.rawData as Record<string, any> : {};
+}
+
+function getHiraYkiho(item: NewMarketResearchItem): string | null {
+    const rawData = getRawData(item);
+    return rawData.hira?.ykiho || rawData.hiraYkiho || null;
+}
+
 function businessTypeAllowed(businessType: BusinessType, requestedTypes: string[] | undefined): boolean {
     if (!requestedTypes || requestedTypes.length === 0) return true;
     if (requestedTypes.includes("obgyn") && ["obgyn", "delivery_hospital", "general_obgyn", "women_hospital"].includes(businessType)) return true;
     return requestedTypes.includes(businessType);
+}
+
+function marketResearchBusinessTypeAllowed(item: NewMarketResearchItem, requestedTypes: string[] | undefined): boolean {
+    if (!requestedTypes || requestedTypes.length === 0) return true;
+    if (requestedTypes.includes("obgyn") && ["obgyn", "delivery_hospital", "general_obgyn", "women_hospital"].includes(String(item.businessType))) return true;
+    if (requestedTypes.includes("delivery_hospital")) {
+        const isDeliveryCandidate = !!item.isDeliveryHospital || (getRawData(item).deliveryCandidate?.score || 0) >= 3;
+        if (isDeliveryCandidate) return true;
+        if (requestedTypes.length === 1) return false;
+    }
+    return businessTypeAllowed(item.businessType as BusinessType, requestedTypes);
 }
 
 function operationStatusAllowed(operationStatus: OperationStatus, requestedStatuses: string[] | undefined): boolean {
@@ -212,12 +344,15 @@ function regionAllowed(item: NewMarketResearchItem, requestedRegions: string[] |
 }
 
 function calculateMarketScore(item: Partial<NewMarketResearchItem>): number {
+    const deliveryCandidateScore = (item.rawData as any)?.deliveryCandidate?.score || 0;
     let score = item.businessType === "delivery_hospital" ? 78 : item.businessType === "women_hospital" ? 74 : 62;
     if (item.website) score += 5;
     if (item.phone) score += 3;
     if ((item.totalDoctorCount || 0) >= 5) score += 6;
     if ((item.totalDoctorCount || 0) >= 10) score += 4;
     if (item.hasDeliveryCenter) score += 5;
+    if (deliveryCandidateScore >= 3) score += 8;
+    else if (deliveryCandidateScore === 2) score += 4;
     return Math.min(score, 95);
 }
 
@@ -238,13 +373,13 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
     const x = row.XPos || row.xPos || null;
     const y = row.YPos || row.yPos || null;
     const medicalDepartments = ["산부인과"];
-    const doctorCounts: Record<string, number> = totalDoctorCount ? { 산부인과: totalDoctorCount } : {};
+    const doctorCounts: Record<string, number> = {};
     const partial: Partial<NewMarketResearchItem> = {
         businessType,
         phone: row.telno || null,
         website: row.hospUrl || null,
         totalDoctorCount,
-        hasDeliveryCenter: businessType !== "general_obgyn",
+        hasDeliveryCenter: false,
     };
     const marketScore = calculateMarketScore(partial);
 
@@ -264,14 +399,14 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
         isNew: false,
         hasUpdates: false,
         isSelected: false,
-        isDeliveryHospital: ["delivery_hospital", "women_hospital"].includes(businessType),
+        isDeliveryHospital: false,
         deliveryCountYear: null,
         deliveryCount: null,
         deliveryCountSource: "HIRA 병원정보서비스에는 분만 건수가 없어 확인 필요",
         medicalDepartments,
         doctorCounts,
         totalDoctorCount,
-        hasDeliveryCenter: ["delivery_hospital", "women_hospital"].includes(businessType),
+        hasDeliveryCenter: false,
         hasFertilityCenter: normalizeText(name).includes("난임"),
         hasPediatricLink: false,
         buildingScale: row.clCdNm || null,
@@ -286,7 +421,7 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
         sourceUrls: [row.hospUrl].filter(Boolean) as string[],
         sourceConfidence: "official",
         verificationStatus: "auto_collected",
-        rawData: { hira: row },
+        rawData: { hira: row, hiraYkiho: row.ykiho || null },
         lastResearchedAt: new Date(),
     };
 }
@@ -300,6 +435,7 @@ async function fetchHiraObgynItems(options: MarketResearchCollectOptions, servic
     const maxRows = getEnvInt("MARKET_RESEARCH_HIRA_MAX_ROWS", DEFAULT_HIRA_MAX_ROWS);
     const selectedRegion = options.regions?.find((region) => region !== "전국");
     const sidoCd = selectedRegion ? HIRA_SIDO_CODES[selectedRegion] : undefined;
+    const yadmNm = options.queryName || process.env.MARKET_RESEARCH_HIRA_QUERY_NAME;
     const errors: MarketResearchCollectResult["errors"] = [];
     const rows: HiraHospitalRow[] = [];
     let totalCount = 0;
@@ -313,6 +449,7 @@ async function fetchHiraObgynItems(options: MarketResearchCollectOptions, servic
                 numOfRows: Math.min(rowsPerPage, remainingRows),
                 sidoCd,
                 dgsbjtCd: OBGYN_DEPARTMENT_CODE,
+                yadmNm,
             });
             const response = await fetch(url);
             const xml = await response.text();
@@ -334,7 +471,6 @@ async function fetchHiraObgynItems(options: MarketResearchCollectOptions, servic
     const items = rows
         .map(mapHiraRowToItem)
         .filter((item): item is NewMarketResearchItem => !!item)
-        .filter((item) => businessTypeAllowed(item.businessType, options.businessTypes))
         .filter((item) => operationStatusAllowed(item.operationStatus || "unknown", options.operationStatuses))
         .filter((item) => regionAllowed(item, options.regions));
 
@@ -349,90 +485,634 @@ async function fetchHiraObgynItems(options: MarketResearchCollectOptions, servic
     };
 }
 
-async function searchGooglePlace(item: NewMarketResearchItem, apiKey: string): Promise<GooglePlace | null> {
-    const response = await fetch(GOOGLE_PLACES_TEXT_SEARCH_ENDPOINT, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask": [
-                "places.id",
-                "places.displayName",
-                "places.formattedAddress",
-                "places.nationalPhoneNumber",
-                "places.internationalPhoneNumber",
-                "places.websiteUri",
-                "places.googleMapsUri",
-                "places.businessStatus",
-                "places.location",
-                "places.types",
-            ].join(","),
-        },
-        body: JSON.stringify({
-            textQuery: `${item.name} ${item.address || item.region || ""}`.trim(),
-            languageCode: "ko",
-            regionCode: "KR",
-            pageSize: 1,
-        }),
-    });
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Google Places HTTP ${response.status}: ${text.slice(0, 200)}`);
-    }
-    const data = await response.json() as { places?: GooglePlace[] };
-    return data.places?.[0] || null;
+function naverMatchScore(item: NewMarketResearchItem, naverItem: NaverLocalItem): number {
+    const itemName = normalizeText(item.name);
+    const itemAddress = normalizeText(item.address);
+    const naverTitle = normalizeText(stripHtml(naverItem.title));
+    const naverAddress = normalizeText(`${naverItem.roadAddress || ""} ${naverItem.address || ""}`);
+    let score = 0;
+
+    if (naverTitle === itemName) score += 8;
+    else if (naverTitle.includes(itemName) || itemName.includes(naverTitle)) score += 5;
+    if (item.district && naverAddress.includes(normalizeText(item.district))) score += 2;
+    if (item.region && naverAddress.includes(normalizeText(item.region))) score += 1;
+    if (itemAddress && naverAddress && (itemAddress.includes(naverAddress.slice(0, 12)) || naverAddress.includes(itemAddress.slice(0, 12)))) score += 2;
+    if (isNaverObgynCategory(naverItem.category)) score += 2;
+
+    return score;
 }
 
-function mergeGooglePlace(item: NewMarketResearchItem, place: GooglePlace): NewMarketResearchItem {
-    const operationStatus: OperationStatus = place.businessStatus === "CLOSED_PERMANENTLY" ? "closed" : item.operationStatus || "unknown";
-    const phone = item.phone || place.nationalPhoneNumber || place.internationalPhoneNumber || null;
-    const website = item.website || place.websiteUri || null;
-    const sourceUrls = Array.from(new Set([...(item.sourceUrls || []), place.googleMapsUri, place.websiteUri].filter(Boolean) as string[]));
-    const sources = Array.from(new Set([...(item.sources || []), "Google Places"]));
-    const marketScore = calculateMarketScore({ ...item, phone, website });
+function buildNaverLocalQueries(item: NewMarketResearchItem): string[] {
+    const addressParts = String(item.address || "").split(/\s+/).filter(Boolean);
+    const shortAddress = addressParts.slice(0, 3).join(" ");
+    const queries = [
+        [item.district || item.city || item.region, item.name].filter(Boolean).join(" "),
+        [item.name, shortAddress].filter(Boolean).join(" "),
+        String(item.name || ""),
+    ];
+    return Array.from(new Set(queries.map((query) => query.trim()).filter(Boolean)));
+}
+
+async function fetchNaverLocalCandidates(
+    query: string,
+    clientId: string,
+    clientSecret: string,
+    maxRetries: number,
+    retryDelayMs: number,
+): Promise<NaverLocalItem[]> {
+    const params = new URLSearchParams({
+        query,
+        display: "5",
+        start: "1",
+        sort: "random",
+    });
+
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(`${NAVER_LOCAL_SEARCH_ENDPOINT}?${params.toString()}`, {
+            headers: {
+                "X-Naver-Client-Id": clientId,
+                "X-Naver-Client-Secret": clientSecret,
+            },
+        });
+
+        if (response.ok) {
+            const data = await response.json() as { items?: NaverLocalItem[] };
+            return data.items || [];
+        }
+
+        const text = await response.text();
+        lastError = new Error(`Naver Local HTTP ${response.status}: ${text.slice(0, 200)}`);
+        if (![429, 500, 502, 503, 504].includes(response.status) || attempt >= maxRetries) break;
+        await sleep(getRetryDelayMs(retryDelayMs, attempt));
+    }
+    throw lastError || new Error("Naver Local 검색 실패");
+}
+
+async function searchNaverLocal(
+    item: NewMarketResearchItem,
+    clientId: string,
+    clientSecret: string,
+    maxRetries = DEFAULT_NAVER_MAX_RETRIES,
+    retryDelayMs = DEFAULT_NAVER_RETRY_DELAY_MS,
+): Promise<NaverLocalItem | null> {
+    let bestMatch: { naverItem: NaverLocalItem; score: number } | null = null;
+    for (const query of buildNaverLocalQueries(item)) {
+        const candidates = await fetchNaverLocalCandidates(query, clientId, clientSecret, maxRetries, retryDelayMs);
+        const match = candidates
+            .map((naverItem) => ({ naverItem, score: naverMatchScore(item, naverItem) }))
+            .sort((a, b) => b.score - a.score)[0] || null;
+
+        if (!match) continue;
+        if (!bestMatch || match.score > bestMatch.score) bestMatch = match;
+        if (match.score >= 8 || isNaverObgynCategory(match.naverItem.category)) return match.naverItem;
+    }
+    return bestMatch?.naverItem || null;
+}
+
+function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem | null): NewMarketResearchItem {
+    const rawData = getRawData(item);
+    const category = stripHtml(naverItem?.category);
+    const naverCategoryMatched = isNaverObgynCategory(category);
+    const nameKeywordMatched = !!rawData.nameKeywordMatched || hasDetailCandidateNameKeyword(item.name);
+    const detailedResearchEligible = !!rawData.detailedResearchEligible || naverCategoryMatched || nameKeywordMatched;
+    const naverTitle = stripHtml(naverItem?.title);
+    const naverLink = naverItem?.link || null;
+    const naverTelephone = stripHtml(naverItem?.telephone);
+    const sourceUrls = Array.from(new Set([...(item.sourceUrls || []), naverLink].filter(Boolean) as string[]));
+    const sources = Array.from(new Set([...(item.sources || []), "네이버 지역검색"]));
+    const deliveryCandidate = rawData.deliveryCandidate
+        ? {
+            ...rawData.deliveryCandidate,
+            naverCategoryMatched,
+            nameKeywordMatched,
+            detailedResearchEligible,
+        }
+        : rawData.deliveryCandidate;
 
     return {
         ...item,
-        operationStatus,
-        phone,
-        website,
-        address: item.address || place.formattedAddress || null,
-        latitude: item.latitude || (place.location?.latitude !== undefined ? String(place.location.latitude) : null),
-        longitude: item.longitude || (place.location?.longitude !== undefined ? String(place.location.longitude) : null),
-        marketScore,
-        priorityGrade: priorityGrade(marketScore),
+        phone: item.phone || naverTelephone || null,
+        website: item.website || null,
         sources,
         sourceUrls,
         rawData: {
-            ...(item.rawData || {}),
-            googlePlace: place,
+            ...rawData,
+            naverPlaceUrl: naverLink,
+            naverLocal: naverItem ? {
+                title: naverTitle,
+                link: naverLink,
+                category,
+                address: stripHtml(naverItem.address),
+                roadAddress: stripHtml(naverItem.roadAddress),
+                mapx: naverItem.mapx || null,
+                mapy: naverItem.mapy || null,
+            } : null,
+            naverCategoryMatched,
+            nameKeywordMatched,
+            detailedResearchEligible,
+            deliveryCandidate,
         },
     };
 }
 
-async function enrichWithGooglePlaces(items: NewMarketResearchItem[], apiKey: string): Promise<MarketResearchCollectResult> {
-    const limit = Math.min(getEnvInt("MARKET_RESEARCH_GOOGLE_PLACES_LIMIT", DEFAULT_GOOGLE_PLACES_LIMIT), items.length);
+async function enrichWithNaverLocal(items: NewMarketResearchItem[], clientId: string | undefined, clientSecret: string | undefined): Promise<MarketResearchCollectResult> {
+    const limit = Math.min(getEnvInt("MARKET_RESEARCH_NAVER_LOCAL_LIMIT", DEFAULT_NAVER_LOCAL_LIMIT), items.length);
+    const delayMs = getEnvInt("MARKET_RESEARCH_NAVER_DELAY_MS", DEFAULT_NAVER_DELAY_MS);
+    const retryDelayMs = getEnvInt("MARKET_RESEARCH_NAVER_RETRY_DELAY_MS", DEFAULT_NAVER_RETRY_DELAY_MS);
+    const maxRetries = getEnvInt("MARKET_RESEARCH_NAVER_MAX_RETRIES", DEFAULT_NAVER_MAX_RETRIES);
     const errors: MarketResearchCollectResult["errors"] = [];
     const enriched: NewMarketResearchItem[] = [];
+
+    if (!clientId || !clientSecret) {
+        return {
+            items: items.map((item) => mergeNaverLocal(item, null)),
+            sources: [],
+            errors: items.length > 0 ? [{ source: "네이버 지역검색", message: "NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET이 없어 네이버 카테고리 필터는 기관명 키워드 예외만 적용했습니다." }] : [],
+        };
+    }
 
     for (let index = 0; index < items.length; index++) {
         const item = items[index];
         if (index >= limit) {
-            enriched.push(item);
+            enriched.push(mergeNaverLocal(item, null));
             continue;
         }
         try {
-            const place = await searchGooglePlace(item, apiKey);
-            enriched.push(place ? mergeGooglePlace(item, place) : item);
+            if (index > 0 && delayMs > 0) await sleep(delayMs);
+            const naverItem = await searchNaverLocal(item, clientId, clientSecret, maxRetries, retryDelayMs);
+            enriched.push(mergeNaverLocal(item, naverItem));
         } catch (error: any) {
-            errors.push({ source: "Google Places", message: `${item.name}: ${error?.message || "보강 실패"}` });
-            enriched.push(item);
+            errors.push({ source: "네이버 지역검색", message: `${item.name}: ${error?.message || "카테고리 조회 실패"}` });
+            enriched.push(mergeNaverLocal(item, null));
         }
+    }
+
+    if (limit < items.length) {
+        errors.push({ source: "네이버 지역검색", message: `네이버 조회 상한 ${limit}건에 도달해 이후 항목은 기관명 키워드 예외만 적용했습니다. MARKET_RESEARCH_NAVER_LOCAL_LIMIT로 조정 가능합니다.` });
     }
 
     return {
         items: enriched,
-        sources: limit > 0 ? ["Google Places"] : [],
+        sources: limit > 0 ? ["네이버 지역검색"] : [],
+        errors,
+    };
+}
+
+async function enrichDeliveryCandidatesWithNaverLocal(items: NewMarketResearchItem[], clientId: string | undefined, clientSecret: string | undefined, options: MarketResearchCollectOptions): Promise<MarketResearchCollectResult> {
+    const deliveryCandidates = items.filter(isFinalDeliveryCandidate);
+    const limit = Math.min(getEnvInt("MARKET_RESEARCH_NAVER_LOCAL_LIMIT", DEFAULT_NAVER_LOCAL_LIMIT), deliveryCandidates.length);
+    const delayMs = getEnvInt("MARKET_RESEARCH_NAVER_DELAY_MS", DEFAULT_NAVER_DELAY_MS);
+    const retryDelayMs = getEnvInt("MARKET_RESEARCH_NAVER_RETRY_DELAY_MS", DEFAULT_NAVER_RETRY_DELAY_MS);
+    const maxRetries = getEnvInt("MARKET_RESEARCH_NAVER_MAX_RETRIES", DEFAULT_NAVER_MAX_RETRIES);
+    const errors: MarketResearchCollectResult["errors"] = [];
+    const enrichedByKey = new Map<string, NewMarketResearchItem>();
+
+    await reportProgress(options, {
+        stage: "naver_enrichment",
+        processed: 0,
+        total: limit,
+        deliveryCandidateCount: deliveryCandidates.length,
+        naverProcessed: 0,
+        errors: 0,
+    });
+
+    if (!clientId || !clientSecret) {
+        return {
+            items,
+            sources: [],
+            errors: deliveryCandidates.length > 0 ? [{ source: "네이버 지역검색", message: "NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET이 없어 분만산부인과 후보 네이버 보강을 건너뛰었습니다." }] : [],
+        };
+    }
+
+    for (let index = 0; index < deliveryCandidates.length; index++) {
+        const item = deliveryCandidates[index];
+        const key = item.stableKey || buildStableKey(item.name, item.address, item.phone);
+        if (index >= limit) {
+            enrichedByKey.set(key, {
+                ...item,
+                rawData: {
+                    ...getRawData(item),
+                    naverSkippedReason: `네이버 조회 상한 ${limit}건 초과`,
+                },
+            });
+            continue;
+        }
+
+        try {
+            if (index > 0 && delayMs > 0) await sleep(delayMs);
+            const naverItem = await searchNaverLocal(item, clientId, clientSecret, maxRetries, retryDelayMs);
+            enrichedByKey.set(key, mergeNaverLocal(item, naverItem));
+        } catch (error: any) {
+            errors.push({ source: "네이버 지역검색", message: `${item.name}: ${error?.message || "카테고리 조회 실패"}` });
+            enrichedByKey.set(key, mergeNaverLocal(item, null));
+        }
+
+        const processed = Math.min(index + 1, limit);
+        if (processed % 10 === 0 || processed === limit) {
+            await reportProgress(options, {
+                stage: "naver_enrichment",
+                processed,
+                total: limit,
+                deliveryCandidateCount: deliveryCandidates.length,
+                naverProcessed: processed,
+                errors: errors.length,
+            });
+        }
+    }
+
+    if (limit < deliveryCandidates.length) {
+        errors.push({ source: "네이버 지역검색", message: `네이버 조회 상한 ${limit}건에 도달해 이후 분만산부인과 후보는 HIRA 기준으로만 유지했습니다. MARKET_RESEARCH_NAVER_LOCAL_LIMIT로 조정 가능합니다.` });
+    }
+
+    return {
+        items: items.map((item) => {
+            const key = item.stableKey || buildStableKey(item.name, item.address, item.phone);
+            return enrichedByKey.get(key) || item;
+        }),
+        sources: limit > 0 ? ["네이버 지역검색"] : [],
+        errors,
+    };
+}
+
+async function fetchHiraDetailRows(serviceKey: string, operation: string, ykiho: string): Promise<HiraDetailRow[]> {
+    const response = await fetch(buildHiraDetailUrl(serviceKey, operation, ykiho));
+    const xml = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${xml.slice(0, 200)}`);
+
+    const message = getHiraResultMessage(xml);
+    if (message) throw new Error(message);
+
+    return parseHiraDetailItems(xml);
+}
+
+function departmentName(row: HiraDetailRow): string | null {
+    return firstString(row, ["dgsbjtCdNm", "dgsbjtNm", "dgsbjtName", "subjectName", "sbjNm"]);
+}
+
+function departmentCode(row: HiraDetailRow): string | null {
+    return firstString(row, ["dgsbjtCd", "dsbjtCd", "subjectCd", "sbjCd"]);
+}
+
+function departmentDoctorCount(row: HiraDetailRow): number {
+    const explicit = firstInt(row, ["dtlSdrCnt", "dgsbjtPrSdrCnt", "drCnt", "chrgDrCnt", "doctorCnt", "mdeptSdrCnt", "sdrCnt", "spclDrCnt"]);
+    if (explicit !== null) return explicit;
+
+    const countValues = Object.entries(row)
+        .filter(([key]) => /cnt$/i.test(key) && !/(slct|select|choice|choi|nurs|grade|room|bed)/i.test(key))
+        .map(([, value]) => toInt(value))
+        .filter((value): value is number => value !== null);
+    return countValues.length > 0 ? Math.max(...countValues) : 0;
+}
+
+function equipmentName(row: HiraDetailRow): string | null {
+    return firstString(row, ["oftCdNm", "equipCdNm", "eqpCdNm", "equipNm", "eqpNm", "equipmentName"]);
+}
+
+function equipmentCount(row: HiraDetailRow): number {
+    return firstInt(row, ["oftCnt", "equipCnt", "eqpCnt", "ownCnt", "hldCnt", "cnt"]) || 0;
+}
+
+function summarizeDepartments(rows: HiraDetailRow[]): {
+    departments: string[];
+    doctorCounts: Record<string, number>;
+    obgynDoctorCount: number;
+    pediatricDoctorCount: number;
+} {
+    const departments: string[] = [];
+    const doctorCounts: Record<string, number> = {};
+    let obgynDoctorCount = 0;
+    let pediatricDoctorCount = 0;
+
+    for (const row of rows) {
+        const name = departmentName(row);
+        if (!name) continue;
+        const code = departmentCode(row);
+        const count = departmentDoctorCount(row);
+        departments.push(name);
+        doctorCounts[name] = count;
+
+        const normalized = normalizeText(name);
+        if (code === OBGYN_DEPARTMENT_CODE || normalized.includes("산부인과")) obgynDoctorCount = Math.max(obgynDoctorCount, count);
+        if (code === PEDIATRICS_DEPARTMENT_CODE || normalized.includes("소아청소년과") || normalized.includes("소아과")) pediatricDoctorCount = Math.max(pediatricDoctorCount, count);
+    }
+
+    return {
+        departments: Array.from(new Set(departments)),
+        doctorCounts,
+        obgynDoctorCount,
+        pediatricDoctorCount,
+    };
+}
+
+function summarizeEquipment(rows: HiraDetailRow[]): { incubatorCount: number; deliveryMonitorCount: number } {
+    let incubatorCount = 0;
+    let deliveryMonitorCount = 0;
+
+    for (const row of rows) {
+        const name = equipmentName(row);
+        if (!name) continue;
+        const normalized = normalizeText(name);
+        const count = equipmentCount(row);
+        if (normalized.includes("인큐베이터") || normalized.includes("incubator")) incubatorCount += count;
+        if (normalized.includes("분만감시기")) deliveryMonitorCount += count;
+    }
+
+    return { incubatorCount, deliveryMonitorCount };
+}
+
+function buildDeliveryCandidateSignals(item: NewMarketResearchItem, departments: ReturnType<typeof summarizeDepartments>, equipment: ReturnType<typeof summarizeEquipment>): DeliveryCandidateSignals {
+    const rawData = getRawData(item);
+    const naverCategoryMatched = !!rawData.naverCategoryMatched;
+    const nameKeywordMatched = !!rawData.nameKeywordMatched;
+    const detailedResearchEligible = !!rawData.detailedResearchEligible;
+    const evidence: string[] = [];
+    let score = 0;
+
+    if (departments.obgynDoctorCount >= 3) {
+        score++;
+        evidence.push(`산부인과 의사 ${departments.obgynDoctorCount}명`);
+    }
+    if (departments.pediatricDoctorCount > 0) {
+        score++;
+        evidence.push(`소아청소년과 의사 ${departments.pediatricDoctorCount}명`);
+    }
+    if (equipment.incubatorCount > 0) {
+        score++;
+        evidence.push(`인큐베이터 ${equipment.incubatorCount}대`);
+    }
+    if (equipment.deliveryMonitorCount > 0) {
+        score++;
+        evidence.push(`분만감시기 ${equipment.deliveryMonitorCount}대`);
+    }
+
+    const grade: DeliveryCandidateSignals["grade"] =
+        score >= 4 ? "strong_candidate" :
+        score === 3 ? "candidate" :
+        score === 2 ? "review" :
+        "low_priority";
+
+    return {
+        naverCategoryMatched,
+        nameKeywordMatched,
+        detailedResearchEligible,
+        obgynDoctorCount: departments.obgynDoctorCount,
+        pediatricDoctorCount: departments.pediatricDoctorCount,
+        incubatorCount: equipment.incubatorCount,
+        deliveryMonitorCount: equipment.deliveryMonitorCount,
+        score,
+        grade,
+        evidence,
+    };
+}
+
+function applyHiraDetailSignals(item: NewMarketResearchItem, departmentRows: HiraDetailRow[], equipmentRows: HiraDetailRow[]): NewMarketResearchItem {
+    const departmentSummary = summarizeDepartments(departmentRows);
+    const equipmentSummary = summarizeEquipment(equipmentRows);
+    const deliveryCandidate = buildDeliveryCandidateSignals(item, departmentSummary, equipmentSummary);
+    const isDeliveryHospital = deliveryCandidate.score >= 3;
+    const businessType: BusinessType = isDeliveryHospital
+        ? "delivery_hospital"
+        : item.businessType === "delivery_hospital"
+            ? (normalizeText(item.name).includes("여성병원") ? "women_hospital" : "general_obgyn")
+            : item.businessType as BusinessType;
+    const rawData = {
+        ...getRawData(item),
+        hiraDepartments: departmentRows,
+        hiraEquipment: equipmentRows,
+        deliveryCandidate,
+    };
+    const nextItem: NewMarketResearchItem = {
+        ...item,
+        businessType,
+        isDeliveryHospital,
+        hasDeliveryCenter: isDeliveryHospital || equipmentSummary.deliveryMonitorCount > 0,
+        hasPediatricLink: departmentSummary.pediatricDoctorCount > 0,
+        medicalDepartments: departmentSummary.departments.length > 0 ? departmentSummary.departments : item.medicalDepartments,
+        doctorCounts: { ...(item.doctorCounts || {}), ...departmentSummary.doctorCounts },
+        deliveryCountSource: `HIRA 상세정보 기준 ${deliveryCandidate.score}/4 충족${deliveryCandidate.evidence.length > 0 ? `: ${deliveryCandidate.evidence.join(", ")}` : ""}`,
+        sourceConfidence: isDeliveryHospital ? "official" : item.sourceConfidence,
+        rawData,
+    };
+    const marketScore = calculateMarketScore(nextItem);
+    return {
+        ...nextItem,
+        marketScore,
+        priorityGrade: priorityGrade(marketScore),
+    };
+}
+
+function firstStageScoreFromDepartments(departments: ReturnType<typeof summarizeDepartments>): number {
+    return (departments.obgynDoctorCount >= 3 ? 1 : 0) + (departments.pediatricDoctorCount > 0 ? 1 : 0);
+}
+
+function isEquipmentResearchCandidate(item: NewMarketResearchItem): boolean {
+    const deliveryCandidate = getRawData(item).deliveryCandidate;
+    const firstStageScore =
+        (deliveryCandidate?.obgynDoctorCount >= 3 ? 1 : 0)
+        + (deliveryCandidate?.pediatricDoctorCount > 0 ? 1 : 0);
+    return firstStageScore > 0;
+}
+
+function isFinalDeliveryCandidate(item: NewMarketResearchItem): boolean {
+    return !!item.isDeliveryHospital || (getRawData(item).deliveryCandidate?.score || 0) >= 3;
+}
+
+function applyHiraDepartmentSignals(item: NewMarketResearchItem, departmentRows: HiraDetailRow[]): NewMarketResearchItem {
+    const departmentSummary = summarizeDepartments(departmentRows);
+    const equipmentSummary = { incubatorCount: 0, deliveryMonitorCount: 0 };
+    const deliveryCandidate = buildDeliveryCandidateSignals(item, departmentSummary, equipmentSummary);
+    const firstStageScore = firstStageScoreFromDepartments(departmentSummary);
+    const rawData = getRawData(item);
+    const nameKeywordMatched = !!rawData.nameKeywordMatched || hasDetailCandidateNameKeyword(item.name);
+    const detailedResearchEligible = firstStageScore > 0 || nameKeywordMatched || !!rawData.detailedResearchEligible;
+    const nextDeliveryCandidate = {
+        ...deliveryCandidate,
+        nameKeywordMatched,
+        detailedResearchEligible,
+    };
+    const nextItem: NewMarketResearchItem = {
+        ...item,
+        hasPediatricLink: departmentSummary.pediatricDoctorCount > 0,
+        medicalDepartments: departmentSummary.departments.length > 0 ? departmentSummary.departments : item.medicalDepartments,
+        doctorCounts: { ...(item.doctorCounts || {}), ...departmentSummary.doctorCounts },
+        deliveryCountSource: `HIRA 진료과/전문의 기준 1차 ${firstStageScore}/2 충족${nextDeliveryCandidate.evidence.length > 0 ? `: ${nextDeliveryCandidate.evidence.join(", ")}` : ""}`,
+        rawData: {
+            ...rawData,
+            hiraDepartments: departmentRows,
+            nameKeywordMatched,
+            detailedResearchEligible,
+            deliveryCandidate: nextDeliveryCandidate,
+        },
+    };
+    const marketScore = calculateMarketScore(nextItem);
+    return {
+        ...nextItem,
+        marketScore,
+        priorityGrade: priorityGrade(marketScore),
+    };
+}
+
+async function enrichWithHiraDepartmentDetails(items: NewMarketResearchItem[], serviceKey: string, options: MarketResearchCollectOptions): Promise<MarketResearchCollectResult> {
+    const errors: MarketResearchCollectResult["errors"] = [];
+    const limit = getEnvInt("MARKET_RESEARCH_HIRA_DETAIL_LIMIT", DEFAULT_HIRA_DETAIL_LIMIT);
+    const total = Math.min(items.filter((item) => !!getHiraYkiho(item)).length, limit);
+    const enriched: NewMarketResearchItem[] = [];
+    let detailedCount = 0;
+    let repeatedDetailFailureCount = 0;
+
+    await reportProgress(options, { stage: "hira_departments", processed: 0, total, hiraDetailProcessed: 0, errors: 0 });
+
+    for (const item of items) {
+        const ykiho = getHiraYkiho(item);
+        if (!ykiho || detailedCount >= limit || repeatedDetailFailureCount >= 5) {
+            enriched.push(item);
+            continue;
+        }
+
+        try {
+            const departmentRows = await fetchHiraDetailRows(serviceKey, "getSpcSbjtSdrInfo2.7", ykiho);
+            detailedCount++;
+            repeatedDetailFailureCount = 0;
+            enriched.push(applyHiraDepartmentSignals(item, departmentRows));
+        } catch (error: any) {
+            detailedCount++;
+            repeatedDetailFailureCount++;
+            if (errors.length < 20) {
+                errors.push({ source: "HIRA 진료과/전문의 상세정보", message: `${item.name}: ${error?.message || "진료과/전문의 조회 실패"}` });
+            }
+            enriched.push(item);
+        }
+
+        if (detailedCount % 25 === 0 || detailedCount === total) {
+            await reportProgress(options, {
+                stage: "hira_departments",
+                processed: detailedCount,
+                total,
+                hiraDetailProcessed: detailedCount,
+                errors: errors.length,
+            });
+        }
+    }
+
+    if (detailedCount >= limit && items.filter((item) => !!getHiraYkiho(item)).length > limit) {
+        errors.push({ source: "HIRA 진료과/전문의 상세정보", message: `상세조사 상한 ${limit}건에 도달했습니다. MARKET_RESEARCH_HIRA_DETAIL_LIMIT로 조정 가능합니다.` });
+    }
+    if (repeatedDetailFailureCount >= 5) {
+        errors.push({ source: "HIRA 진료과/전문의 상세정보", message: "상세정보 API 연속 실패가 발생해 남은 진료과/전문의 조회를 중단했습니다. 의료기관별상세정보서비스 활용신청 또는 인증키 권한을 확인해야 합니다." });
+    }
+
+    return {
+        items: enriched,
+        sources: detailedCount > 0 ? ["HIRA 의료기관별상세정보서비스:진료과/전문의"] : [],
+        errors,
+    };
+}
+
+async function enrichWithHiraEquipmentDetails(items: NewMarketResearchItem[], serviceKey: string, options: MarketResearchCollectOptions): Promise<MarketResearchCollectResult> {
+    const errors: MarketResearchCollectResult["errors"] = [];
+    const limit = getEnvInt("MARKET_RESEARCH_HIRA_DETAIL_LIMIT", DEFAULT_HIRA_DETAIL_LIMIT);
+    const eligibleItems = items.filter((item) => !!getHiraYkiho(item) && isEquipmentResearchCandidate(item));
+    const total = Math.min(eligibleItems.length, limit);
+    const eligibleKeys = new Set(eligibleItems.slice(0, limit).map((item) => item.stableKey || buildStableKey(item.name, item.address, item.phone)));
+    const enriched: NewMarketResearchItem[] = [];
+    let equipmentCount = 0;
+    let repeatedDetailFailureCount = 0;
+
+    await reportProgress(options, { stage: "hira_equipment", processed: 0, total, equipmentProcessed: 0, deliveryCandidateCount: 0, errors: 0 });
+
+    for (const item of items) {
+        const key = item.stableKey || buildStableKey(item.name, item.address, item.phone);
+        const ykiho = getHiraYkiho(item);
+        if (!ykiho || !eligibleKeys.has(key) || repeatedDetailFailureCount >= 5) {
+            enriched.push(item);
+            continue;
+        }
+
+        try {
+            const equipmentRows = await fetchHiraDetailRows(serviceKey, "getMedOftInfo2.7", ykiho);
+            const departmentRows = (getRawData(item).hiraDepartments || []) as HiraDetailRow[];
+            equipmentCount++;
+            repeatedDetailFailureCount = 0;
+            enriched.push(applyHiraDetailSignals(item, departmentRows, equipmentRows));
+        } catch (error: any) {
+            equipmentCount++;
+            repeatedDetailFailureCount++;
+            if (errors.length < 20) {
+                errors.push({ source: "HIRA 의료장비 상세정보", message: `${item.name}: ${error?.message || "의료장비 조회 실패"}` });
+            }
+            enriched.push(item);
+        }
+
+        if (equipmentCount % 25 === 0 || equipmentCount === total) {
+            const currentItems = [...enriched, ...items.slice(enriched.length)];
+            await reportProgress(options, {
+                stage: "hira_equipment",
+                processed: equipmentCount,
+                total,
+                equipmentProcessed: equipmentCount,
+                deliveryCandidateCount: currentItems.filter(isFinalDeliveryCandidate).length,
+                errors: errors.length,
+            });
+        }
+    }
+
+    if (eligibleItems.length > limit) {
+        errors.push({ source: "HIRA 의료장비 상세정보", message: `의료장비 상세조사 상한 ${limit}건에 도달했습니다. MARKET_RESEARCH_HIRA_DETAIL_LIMIT로 조정 가능합니다.` });
+    }
+    if (repeatedDetailFailureCount >= 5) {
+        errors.push({ source: "HIRA 의료장비 상세정보", message: "상세정보 API 연속 실패가 발생해 남은 의료장비 조회를 중단했습니다. 의료기관별상세정보서비스 활용신청 또는 인증키 권한을 확인해야 합니다." });
+    }
+
+    return {
+        items: enriched,
+        sources: equipmentCount > 0 ? ["HIRA 의료기관별상세정보서비스:의료장비"] : [],
+        errors,
+    };
+}
+
+async function enrichWithHiraDetails(items: NewMarketResearchItem[], serviceKey: string): Promise<MarketResearchCollectResult> {
+    const errors: MarketResearchCollectResult["errors"] = [];
+    const limit = getEnvInt("MARKET_RESEARCH_HIRA_DETAIL_LIMIT", DEFAULT_HIRA_DETAIL_LIMIT);
+    const enriched: NewMarketResearchItem[] = [];
+    let detailedCount = 0;
+    let repeatedDetailFailureCount = 0;
+
+    for (const item of items) {
+        const rawData = getRawData(item);
+        const ykiho = getHiraYkiho(item);
+        if (!rawData.detailedResearchEligible || !ykiho || detailedCount >= limit || repeatedDetailFailureCount >= 5) {
+            enriched.push(item);
+            continue;
+        }
+
+        try {
+            const [departmentRows, equipmentRows] = await Promise.all([
+                fetchHiraDetailRows(serviceKey, "getSpcSbjtSdrInfo2.7", ykiho),
+                fetchHiraDetailRows(serviceKey, "getMedOftInfo2.7", ykiho),
+            ]);
+            enriched.push(applyHiraDetailSignals(item, departmentRows, equipmentRows));
+            detailedCount++;
+            repeatedDetailFailureCount = 0;
+        } catch (error: any) {
+            repeatedDetailFailureCount++;
+            if (errors.length < 20) {
+                errors.push({ source: "HIRA 의료기관별상세정보서비스", message: `${item.name}: ${error?.message || "상세정보 조회 실패"}` });
+            }
+            enriched.push(item);
+        }
+    }
+
+    if (detailedCount >= limit) {
+        errors.push({ source: "HIRA 의료기관별상세정보서비스", message: `상세조사 상한 ${limit}건에 도달했습니다. MARKET_RESEARCH_HIRA_DETAIL_LIMIT로 조정 가능합니다.` });
+    }
+    if (repeatedDetailFailureCount >= 5) {
+        errors.push({ source: "HIRA 의료기관별상세정보서비스", message: "상세정보 API 연속 실패가 발생해 남은 상세조사를 중단했습니다. 의료기관별상세정보서비스 활용신청 또는 인증키 권한을 확인해야 합니다." });
+    }
+
+    return {
+        items: enriched,
+        sources: detailedCount > 0 ? ["HIRA 의료기관별상세정보서비스"] : [],
         errors,
     };
 }
@@ -590,27 +1270,54 @@ function buildBaseItems(options: MarketResearchCollectOptions): NewMarketResearc
 export async function collectMarketResearchItems(options: MarketResearchCollectOptions): Promise<MarketResearchCollectResult> {
     const errors: Array<{ source: string; message: string }> = [];
     const publicDataKey = process.env.PUBLIC_DATA_SERVICE_KEY || process.env.HIRA_SERVICE_KEY;
-    const googlePlacesKey = process.env.GOOGLE_PLACES_API_KEY;
+    await reportProgress(options, { stage: "hira_base", processed: 0, total: 0, errors: 0 });
     const hiraResult = publicDataKey
         ? await fetchHiraObgynItems(options, publicDataKey)
         : { items: [], sources: [], errors: [{ source: "공공데이터포털", message: "PUBLIC_DATA_SERVICE_KEY가 없어 HIRA 병원정보서비스 수집은 건너뛰었습니다." }] };
+    await reportProgress(options, {
+        stage: "hira_base",
+        processed: hiraResult.items.length,
+        total: hiraResult.items.length,
+        hiraBaseCount: hiraResult.items.length,
+        errors: hiraResult.errors.length,
+    });
+
+    const departmentDetailResult = publicDataKey
+        ? await enrichWithHiraDepartmentDetails(hiraResult.items, publicDataKey, options)
+        : { items: hiraResult.items, sources: [], errors: [] };
+    const equipmentDetailResult = publicDataKey
+        ? await enrichWithHiraEquipmentDetails(departmentDetailResult.items, publicDataKey, options)
+        : { items: departmentDetailResult.items, sources: [], errors: [] };
+    const naverResult = await enrichDeliveryCandidatesWithNaverLocal(equipmentDetailResult.items, process.env.NAVER_CLIENT_ID, process.env.NAVER_CLIENT_SECRET, options);
     const postpartumImport = await importPostpartumCareCsvFromDrive({
         businessTypes: options.businessTypes,
         operationStatuses: options.operationStatuses,
         regions: options.regions,
     });
-    const hospitalItems = googlePlacesKey
-        ? await enrichWithGooglePlaces(hiraResult.items, googlePlacesKey)
-        : { items: hiraResult.items, sources: [], errors: hiraResult.items.length > 0 ? [{ source: "Google Places", message: "GOOGLE_PLACES_API_KEY가 없어 지도/홈페이지 보강은 건너뛰었습니다." }] : [] };
+    await reportProgress(options, {
+        stage: "drive_csv",
+        processed: postpartumImport.items.length,
+        total: postpartumImport.items.length,
+        deliveryCandidateCount: naverResult.items.filter(isFinalDeliveryCandidate).length,
+        naverProcessed: Math.min(getEnvInt("MARKET_RESEARCH_NAVER_LOCAL_LIMIT", DEFAULT_NAVER_LOCAL_LIMIT), naverResult.items.filter(isFinalDeliveryCandidate).length),
+        errors: hiraResult.errors.length + departmentDetailResult.errors.length + equipmentDetailResult.errors.length + naverResult.errors.length + postpartumImport.errors.length,
+    });
+
+    const hospitalItems = naverResult.items
+        .filter((item) => marketResearchBusinessTypeAllowed(item, options.businessTypes))
+        .filter((item) => operationStatusAllowed(item.operationStatus || "unknown", options.operationStatuses))
+        .filter((item) => regionAllowed(item, options.regions));
 
     if (!process.env.KOSIS_API_KEY) {
         errors.push({ source: "KOSIS", message: "KOSIS API 키가 없어 출산율 자동조회는 건너뛰었습니다." });
     }
     errors.push(...hiraResult.errors);
-    errors.push(...hospitalItems.errors);
+    errors.push(...departmentDetailResult.errors);
+    errors.push(...equipmentDetailResult.errors);
+    errors.push(...naverResult.errors);
     errors.push(...postpartumImport.errors);
 
-    const realItems = mergeUniqueItems([hospitalItems.items, postpartumImport.items]);
+    const realItems = mergeUniqueItems([hospitalItems, postpartumImport.items]);
     const items = realItems.length > 0 ? realItems : buildBaseItems(options);
     if (realItems.length === 0) {
         errors.push({ source: "시장조사 수집기", message: "실제 원천 수집 결과가 없어 검증용 샘플 데이터를 반환했습니다." });
@@ -618,8 +1325,67 @@ export async function collectMarketResearchItems(options: MarketResearchCollectO
     const sources = Array.from(new Set([
         ...DEFAULT_SOURCES,
         ...hiraResult.sources,
-        ...hospitalItems.sources,
-        ...(postpartumImport.sourceName ? [`Google Drive CSV:${postpartumImport.sourceName}`] : []),
+        ...departmentDetailResult.sources,
+        ...equipmentDetailResult.sources,
+        ...naverResult.sources,
+        ...(postpartumImport.items.length > 0 && postpartumImport.sourceName ? [`Google Drive CSV:${postpartumImport.sourceName}`] : []),
+    ]));
+
+    await reportProgress(options, {
+        stage: "collected",
+        processed: items.length,
+        total: items.length,
+        hiraBaseCount: hiraResult.items.length,
+        deliveryCandidateCount: items.filter(isFinalDeliveryCandidate).length,
+        errors: errors.length,
+    });
+
+    return {
+        items,
+        sources,
+        errors,
+    };
+}
+
+async function collectMarketResearchItemsLegacy(options: MarketResearchCollectOptions): Promise<MarketResearchCollectResult> {
+    const errors: Array<{ source: string; message: string }> = [];
+    const publicDataKey = process.env.PUBLIC_DATA_SERVICE_KEY || process.env.HIRA_SERVICE_KEY;
+    const hiraResult = publicDataKey
+        ? await fetchHiraObgynItems(options, publicDataKey)
+        : { items: [], sources: [], errors: [{ source: "공공데이터포털", message: "PUBLIC_DATA_SERVICE_KEY가 없어 HIRA 병원정보서비스 수집은 건너뛰었습니다." }] };
+    const naverResult = await enrichWithNaverLocal(hiraResult.items, process.env.NAVER_CLIENT_ID, process.env.NAVER_CLIENT_SECRET);
+    const hiraDetailResult = publicDataKey
+        ? await enrichWithHiraDetails(naverResult.items, publicDataKey)
+        : { items: naverResult.items, sources: [], errors: [] };
+    const postpartumImport = await importPostpartumCareCsvFromDrive({
+        businessTypes: options.businessTypes,
+        operationStatuses: options.operationStatuses,
+        regions: options.regions,
+    });
+    const hospitalItems = hiraDetailResult.items
+        .filter((item) => marketResearchBusinessTypeAllowed(item, options.businessTypes))
+        .filter((item) => operationStatusAllowed(item.operationStatus || "unknown", options.operationStatuses))
+        .filter((item) => regionAllowed(item, options.regions));
+
+    if (!process.env.KOSIS_API_KEY) {
+        errors.push({ source: "KOSIS", message: "KOSIS API 키가 없어 출산율 자동조회는 건너뛰었습니다." });
+    }
+    errors.push(...hiraResult.errors);
+    errors.push(...naverResult.errors);
+    errors.push(...hiraDetailResult.errors);
+    errors.push(...postpartumImport.errors);
+
+    const realItems = mergeUniqueItems([hospitalItems, postpartumImport.items]);
+    const items = realItems.length > 0 ? realItems : buildBaseItems(options);
+    if (realItems.length === 0) {
+        errors.push({ source: "시장조사 수집기", message: "실제 원천 수집 결과가 없어 검증용 샘플 데이터를 반환했습니다." });
+    }
+    const sources = Array.from(new Set([
+        ...DEFAULT_SOURCES,
+        ...hiraResult.sources,
+        ...naverResult.sources,
+        ...hiraDetailResult.sources,
+        ...(postpartumImport.items.length > 0 && postpartumImport.sourceName ? [`Google Drive CSV:${postpartumImport.sourceName}`] : []),
     ]));
 
     return {

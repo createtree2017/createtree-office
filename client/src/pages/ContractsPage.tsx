@@ -84,7 +84,7 @@ const ContractsPage: React.FC = () => {
             handleDetail(autoViewId);
             setAutoViewId(null);
         }
-    }, [autoViewId, contracts]);
+    }, [autoViewId, contracts, view]);
 
     const handleDetail = async (id: number) => {
         try {
@@ -180,7 +180,6 @@ const ContractsPage: React.FC = () => {
 
     // ===== 상세 뷰 =====
     if (view === 'detail' && detail) {
-        const vatAmount = detail ? (detail.vatIncluded !== false ? Math.round(detail.totalAmount * 0.1) : 0) : 0;
         return (
             <div className="max-w-4xl mx-auto p-6 pt-20 space-y-6">
                 <div className="flex items-center justify-between">

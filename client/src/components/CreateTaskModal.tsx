@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 import { useClients } from '../hooks/useClients';
 import { useTemplates } from '../hooks/useTemplates';
 import { useUsers } from '../hooks/useUsers';

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { X, GripVertical, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 
 interface Task {
     id: number;

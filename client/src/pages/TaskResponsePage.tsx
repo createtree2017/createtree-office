@@ -45,9 +45,6 @@ const TaskResponsePage: React.FC = () => {
     const [template, setTemplate] = useState<Template | null>(null);
     const [responses, setResponses] = useState<Record<string, any>>({});
 
-    // 뒤로가기 처리를 위한 원본 응답 상태 (변경 여부 추적용)
-    const [originalResponses, setOriginalResponses] = useState<string>('');
-
     // === TanStack Query 기반 데이터 페칭 ===
     const { data: taskResponseData, isLoading: loading } = useQuery({
         queryKey: ['task-response', taskId],
@@ -87,9 +84,6 @@ const TaskResponsePage: React.FC = () => {
         setTemplate(taskResponseData.template);
         if (taskResponseData.responseData) {
             setResponses(taskResponseData.responseData);
-            setOriginalResponses(JSON.stringify(taskResponseData.responseData));
-        } else {
-            setOriginalResponses('{}');
         }
     }, [taskResponseData]);
 
@@ -169,7 +163,7 @@ const TaskResponsePage: React.FC = () => {
             } else {
                 toast.error(data.message || '임시저장 실패');
             }
-        } catch (error) {
+        } catch {
             toast.error('통신 오류가 발생했습니다.');
         } finally {
             setIsSaving(false);
@@ -212,7 +206,7 @@ const TaskResponsePage: React.FC = () => {
             } else {
                 toast.error(data.message || '제출 실패');
             }
-        } catch (error) {
+        } catch {
             toast.error('통신 오류가 발생했습니다.');
         } finally {
             setIsSubmitting(false);
@@ -260,7 +254,7 @@ const TaskResponsePage: React.FC = () => {
                         ))}
                     </div>
                 );
-            case 'checkbox':
+            case 'checkbox': {
                 const selectedList = Array.isArray(val) ? val : [];
                 return (
                     <div className="space-y-3">
@@ -277,6 +271,7 @@ const TaskResponsePage: React.FC = () => {
                         ))}
                     </div>
                 );
+            }
             case 'select':
                 return (
                     <select

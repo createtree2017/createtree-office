@@ -36,30 +36,6 @@ interface Client {
     activeContracts?: { id: number, contractNumber: string, title: string, startDate: string, endDate: string }[];
 }
 
-interface LinkableQuotation {
-    id: number;
-    quotationNumber: string;
-    title: string;
-    clientName?: string;
-    totalAmount: number;
-    status: string;
-}
-
-interface LinkableContract {
-    id: number;
-    contractNumber: string;
-    title: string;
-    clientName?: string;
-    totalAmount: number;
-    status: string;
-}
-
-interface Template {
-    id: number;
-    title: string;
-    description?: string | null;
-}
-
 const AdminPage = () => {
     const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
@@ -121,7 +97,7 @@ const AdminPage = () => {
             const clientsResult = await clientsRes.json();
             const servicesResult = await servicesRes.json();
 
-            let servicesMap: Record<number, any> = {};
+            const servicesMap: Record<number, any> = {};
             if (servicesResult.success && servicesResult.data) {
                 for (const clientId in servicesResult.data) {
                     const servicesList = servicesResult.data[clientId];
