@@ -291,6 +291,7 @@ export interface MarketResearchItem {
     sourceUrls?: string[];
     sourceConfidence: string;
     verificationStatus: MarketResearchVerificationStatus;
+    rawData?: Record<string, any>;
     memo?: string | null;
     lastResearchedAt: string;
     createdAt: string;

@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../lib/api';
 
 export function useTaskResponse(taskId: string | undefined) {
   return useQuery({

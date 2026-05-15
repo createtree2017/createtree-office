@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-    Package, Plus, Save, ArrowLeft, Trash2, MoveUp, MoveDown,
-    GripVertical, ChevronDown, ChevronUp, Eye, EyeOff, Pencil, Settings2
+    Package, Plus, Save, ArrowLeft, Trash2, Pencil, Settings2
 } from 'lucide-react';
 import SubNav from '../components/SubNav';
 
@@ -25,8 +24,6 @@ const getHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `
 const BILLING_LABELS: Record<BillingType, string> = { monthly: '월정액', per_event: '건당', one_time: '일회성', quote_based: '견적기반' };
 const BILLING_COLORS: Record<BillingType, string> = { monthly: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', per_event: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', one_time: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', quote_based: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' };
 const PRICE_UNIT_LABELS: Record<PriceUnit, string> = { per_month: '월', per_event: '회', per_person: '인', per_item: '건', one_time: '일회' };
-const CATEGORY_LABELS: Record<ItemCategory, string> = { fixed: '고정비(필수)', variable: '변동비(선택)' };
-
 const uid = () => `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 const ServiceProductsPage: React.FC = () => {
@@ -73,12 +70,9 @@ const ServiceProductsPage: React.FC = () => {
     useEffect(() => { if (servicesData) setServices(servicesData); }, [servicesData]);
     useEffect(() => { if (policiesData) setPolicies(policiesData); }, [policiesData]);
 
-    // fetchServices / fetchPolicies 대체 래퍼
+    // fetchServices 대체 래퍼
     const fetchServices = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['services'] });
-    }, [queryClient]);
-    const fetchPolicies = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['discount-policies'] });
     }, [queryClient]);
 
     // ===== 편집 로직 =====

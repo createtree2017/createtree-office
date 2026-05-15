@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTasks } from '../hooks/useTasks';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { useModal } from '../contexts/ModalContext';
+import { useModal } from '../contexts/useModal';
 import CreateTaskModal from '../components/CreateTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
 import ExpandedColumnModal from '../components/ExpandedColumnModal';
@@ -134,7 +134,7 @@ const TasksPage = () => {
     const handleTaskClick = (task: Task) => openModal(<TaskDetailModal task={task} onSuccess={fetchTasks} />);
 
     const onDragEnd = async (result: DropResult) => {
-        const { destination, source, draggableId } = result;
+        const { destination, source } = result;
         if (!destination) return;
         if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
@@ -143,7 +143,6 @@ const TasksPage = () => {
             return;
         }
 
-        const taskId = parseInt(draggableId);
         const newStatus = destination.droppableId as Task['status'];
         const oldStatus = source.droppableId as Task['status'];
         const isSameColumn = oldStatus === newStatus;
@@ -430,7 +429,7 @@ const TasksPage = () => {
             <DragDropContext onDragEnd={onCalendarDragEnd}>
                 <Calendar
                     className="w-full bg-transparent border-none"
-                    onClickDay={(date, e) => {
+                    onClickDay={(date) => {
                         // 이벤트 배지 클릭은 제외 (stopPropagation으로 이미 처리됨)
                         handleCalendarDayClick(date);
                     }}
