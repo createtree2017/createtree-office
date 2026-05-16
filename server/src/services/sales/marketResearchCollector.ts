@@ -1,5 +1,6 @@
 import type { marketResearchItems } from "../../db/schema.js";
 import { importPostpartumCareCsvFromDrive } from "./postpartumCareCsvImporter.js";
+import * as cheerio from "cheerio";
 
 type NewMarketResearchItem = typeof marketResearchItems.$inferInsert;
 type BusinessType = "obgyn" | "delivery_hospital" | "general_obgyn" | "women_hospital" | "postpartum_center";
@@ -49,6 +50,9 @@ const DEFAULT_SOURCES = [
 const HIRA_HOSPITAL_ENDPOINT = "https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList";
 const HIRA_DETAIL_ENDPOINT = "https://apis.data.go.kr/B551182/MadmDtlInfoService2.7";
 const NAVER_LOCAL_SEARCH_ENDPOINT = "https://openapi.naver.com/v1/search/local.json";
+const NAVER_MOBILE_SEARCH_ENDPOINT = "https://m.map.naver.com/search2/search.naver";
+const NAVER_MOBILE_PLACE_ENDPOINT = "https://m.place.naver.com/place";
+const NAVER_MAP_PLACE_URL_PREFIX = "https://map.naver.com/p/entry/place";
 const OBGYN_DEPARTMENT_CODE = "10";
 const PEDIATRICS_DEPARTMENT_CODE = "11";
 const DEFAULT_HIRA_ROWS_PER_PAGE = 100;
@@ -129,6 +133,31 @@ interface NaverLocalItem {
     roadAddress?: string;
     mapx?: string;
     mapy?: string;
+}
+
+interface NaverPlaceSearchItem {
+    id?: string | number;
+    name?: string;
+    category?: string;
+    address?: string;
+    roadAddress?: string;
+    tel?: string;
+    latitude?: number | string;
+    longitude?: number | string;
+}
+
+interface NaverPlaceLink {
+    label: string;
+    url: string;
+    type: "homepage" | "blog" | "instagram" | "facebook" | "youtube" | "kakao" | "reservation" | "naver" | "other";
+    source: "naver_local" | "naver_place";
+}
+
+interface NaverPlaceInfo {
+    placeId: string | null;
+    placeUrl: string | null;
+    telephone?: string | null;
+    links: NaverPlaceLink[];
 }
 
 interface DeliveryCandidateSignals {
@@ -312,6 +341,102 @@ function getRawData(item: NewMarketResearchItem): Record<string, any> {
     return (item.rawData && typeof item.rawData === "object") ? item.rawData as Record<string, any> : {};
 }
 
+function normalizePhone(value: string | null | undefined): string {
+    return String(value || "").replace(/[^0-9]/g, "");
+}
+
+function cleanUrl(value: string | null | undefined): string | null {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return null;
+    try {
+        const url = new URL(trimmed, "https://m.place.naver.com");
+        if (!["http:", "https:"].includes(url.protocol)) return null;
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
+
+function classifyNaverPlaceLink(url: string, label: string): NaverPlaceLink["type"] {
+    const normalizedUrl = url.toLowerCase();
+    const normalizedLabel = normalizeText(label);
+    if (normalizedUrl.includes("instagram.com") || normalizedLabel.includes("인스타")) return "instagram";
+    if (normalizedUrl.includes("blog.naver.com") || normalizedUrl.includes("blog.me") || normalizedLabel.includes("블로그")) return "blog";
+    if (normalizedUrl.includes("facebook.com") || normalizedLabel.includes("페이스북")) return "facebook";
+    if (normalizedUrl.includes("youtube.com") || normalizedUrl.includes("youtu.be") || normalizedLabel.includes("유튜브")) return "youtube";
+    if (normalizedUrl.includes("pf.kakao.com") || normalizedUrl.includes("kakao.com") || normalizedLabel.includes("카카오")) return "kakao";
+    if (normalizedUrl.includes("booking.naver.com") || normalizedLabel.includes("예약")) return "reservation";
+    if (normalizedUrl.includes("silson24.or.kr") || normalizedLabel.includes("서비스")) return "other";
+    if (normalizedUrl.includes("naver.com") || normalizedUrl.includes("naver.me")) return "naver";
+    return "homepage";
+}
+
+function isBusinessLink(url: string): boolean {
+    const normalizedUrl = url.toLowerCase();
+    if (normalizedUrl.includes("pstatic.net")) return false;
+    if (normalizedUrl.includes("navercorp.com")) return false;
+    if (normalizedUrl.includes("help.naver.com")) return false;
+    if (normalizedUrl.includes("nid.naver.com")) return false;
+    if (normalizedUrl.includes("m.place.naver.com") || normalizedUrl.includes("map.naver.com")) return false;
+    if (normalizedUrl.includes("naver.com") || normalizedUrl.includes("naver.me")) {
+        return normalizedUrl.includes("blog.naver.com")
+            || normalizedUrl.includes("booking.naver.com")
+            || normalizedUrl.includes("talk.naver.com")
+            || normalizedUrl.includes("naver.me");
+    }
+    return true;
+}
+
+function dedupeNaverPlaceLinks(links: NaverPlaceLink[]): NaverPlaceLink[] {
+    const seen = new Set<string>();
+    const result: NaverPlaceLink[] = [];
+    for (const link of links) {
+        const key = link.url.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(link);
+    }
+    return result;
+}
+
+function addNaverLink(links: NaverPlaceLink[], url: string | null, label: string, source: NaverPlaceLink["source"]) {
+    if (!url || !isBusinessLink(url)) return;
+    links.push({
+        label: label || url,
+        url,
+        type: classifyNaverPlaceLink(url, label),
+        source,
+    });
+}
+
+function getPreferredWebsiteLink(links: NaverPlaceLink[], naverLocalLink: string | null): string | null {
+    const localLink = cleanUrl(naverLocalLink);
+    if (localLink && isBusinessLink(localLink)) return localLink;
+    return links.find((link) => link.type === "homepage" && normalizeText(link.label).includes("홈페이지"))?.url
+        || links.find((link) => link.type === "blog")?.url
+        || links.find((link) => link.type === "homepage")?.url
+        || links.find((link) => link.type === "naver")?.url
+        || null;
+}
+
+function getPreferredTypedLink(links: NaverPlaceLink[], type: NaverPlaceLink["type"]): string | null {
+    return links.find((link) => link.type === type)?.url || null;
+}
+
+function extractNaverPlaceLinks(html: string, naverLocalLink: string | null): NaverPlaceLink[] {
+    const links: NaverPlaceLink[] = [];
+    addNaverLink(links, cleanUrl(naverLocalLink), "대표 링크", "naver_local");
+
+    const $ = cheerio.load(html);
+    $("a[href]").each((_, element) => {
+        const href = cleanUrl($(element).attr("href"));
+        const label = stripHtml($(element).text()).replace(/\s+/g, " ").trim();
+        addNaverLink(links, href, label, "naver_place");
+    });
+
+    return dedupeNaverPlaceLinks(links);
+}
+
 function getHiraYkiho(item: NewMarketResearchItem): string | null {
     const rawData = getRawData(item);
     return rawData.hira?.ykiho || rawData.hiraYkiho || null;
@@ -376,8 +501,8 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
     const doctorCounts: Record<string, number> = {};
     const partial: Partial<NewMarketResearchItem> = {
         businessType,
-        phone: row.telno || null,
-        website: row.hospUrl || null,
+        phone: null,
+        website: null,
         totalDoctorCount,
         hasDeliveryCenter: false,
     };
@@ -393,9 +518,9 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
         district: row.sgguCdNm || addressParts.district,
         address,
         operationStatus: "operating",
-        phone: row.telno || null,
+        phone: null,
         email: null,
-        website: row.hospUrl || null,
+        website: null,
         isNew: false,
         hasUpdates: false,
         isSelected: false,
@@ -418,10 +543,15 @@ function mapHiraRowToItem(row: HiraHospitalRow): NewMarketResearchItem | null {
         marketScore,
         priorityGrade: priorityGrade(marketScore),
         sources: ["HIRA 병원정보서비스"],
-        sourceUrls: [row.hospUrl].filter(Boolean) as string[],
+        sourceUrls: [],
         sourceConfidence: "official",
         verificationStatus: "auto_collected",
-        rawData: { hira: row, hiraYkiho: row.ykiho || null },
+        rawData: {
+            hira: row,
+            hiraYkiho: row.ykiho || null,
+            hiraPhone: row.telno || null,
+            hiraWebsite: row.hospUrl || null,
+        },
         lastResearchedAt: new Date(),
     };
 }
@@ -502,6 +632,161 @@ function naverMatchScore(item: NewMarketResearchItem, naverItem: NaverLocalItem)
     return score;
 }
 
+function naverPlaceSearchScore(item: NewMarketResearchItem, place: NaverPlaceSearchItem): number {
+    const itemName = normalizeText(item.name);
+    const itemAddress = normalizeText(item.address);
+    const placeName = normalizeText(place.name);
+    const placeAddress = normalizeText(`${place.roadAddress || ""} ${place.address || ""}`);
+    const itemPhone = normalizePhone(item.phone);
+    const placePhone = normalizePhone(place.tel);
+    let score = 0;
+
+    if (placeName === itemName) score += 8;
+    else if (placeName.includes(itemName) || itemName.includes(placeName)) score += 5;
+    if (item.district && placeAddress.includes(normalizeText(item.district))) score += 2;
+    if (item.region && placeAddress.includes(normalizeText(item.region))) score += 1;
+    if (itemAddress && placeAddress && (itemAddress.includes(placeAddress.slice(0, 12)) || placeAddress.includes(itemAddress.slice(0, 12)))) score += 2;
+    if (itemPhone && placePhone && (itemPhone === placePhone || itemPhone.endsWith(placePhone.slice(-8)) || placePhone.endsWith(itemPhone.slice(-8)))) score += 3;
+    if (normalizeText(place.category).includes("산부인과")) score += 2;
+
+    return score;
+}
+
+function collectNaverSearchItems(value: unknown, result: NaverPlaceSearchItem[] = []): NaverPlaceSearchItem[] {
+    if (!value || typeof value !== "object") return result;
+    if (Array.isArray(value)) {
+        for (const item of value) collectNaverSearchItems(item, result);
+        return result;
+    }
+
+    const record = value as Record<string, unknown>;
+    if (
+        (typeof record.id === "number" || typeof record.id === "string")
+        && typeof record.name === "string"
+        && (typeof record.address === "string" || typeof record.roadAddress === "string")
+    ) {
+        result.push(record as NaverPlaceSearchItem);
+    }
+
+    for (const child of Object.values(record)) {
+        if (child && typeof child === "object") collectNaverSearchItems(child, result);
+    }
+    return result;
+}
+
+function parseNaverMobileSearchItems(html: string): NaverPlaceSearchItem[] {
+    const items: NaverPlaceSearchItem[] = [];
+    const scriptRegex = /window\.__RQ_STREAMING_STATE__\.push\(([\s\S]*?)\);\s*window\.__RQ_STREAMING_CALLBACK__/g;
+    let match: RegExpExecArray | null;
+    while ((match = scriptRegex.exec(html)) !== null) {
+        try {
+            collectNaverSearchItems(JSON.parse(match[1]), items);
+        } catch {
+            // Ignore unrelated streaming chunks.
+        }
+    }
+    return dedupeNaverSearchItems(items);
+}
+
+function dedupeNaverSearchItems(items: NaverPlaceSearchItem[]): NaverPlaceSearchItem[] {
+    const seen = new Set<string>();
+    const result: NaverPlaceSearchItem[] = [];
+    for (const item of items) {
+        const id = item.id ? String(item.id) : "";
+        const key = id || [item.name, item.roadAddress || item.address, item.tel].map((value) => normalizeText(String(value || ""))).join("|");
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        result.push(item);
+    }
+    return result;
+}
+
+function naverLocalCoord(value: string | null | undefined): number | null {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.abs(parsed) > 1000 ? parsed / 10000000 : parsed;
+}
+
+function getNaverSearchCoord(item: NewMarketResearchItem, naverItem?: NaverLocalItem | null): string {
+    const naverLongitude = naverLocalCoord(naverItem?.mapx);
+    const naverLatitude = naverLocalCoord(naverItem?.mapy);
+    if (naverLongitude && naverLatitude) return `${naverLongitude};${naverLatitude}`;
+
+    const longitude = Number(item.longitude);
+    const latitude = Number(item.latitude);
+    if (Number.isFinite(longitude) && Number.isFinite(latitude)) return `${longitude};${latitude}`;
+    return "127.027619;37.497952";
+}
+
+async function searchNaverPlace(item: NewMarketResearchItem, naverItem?: NaverLocalItem | null): Promise<NaverPlaceSearchItem | null> {
+    let bestMatch: { place: NaverPlaceSearchItem; score: number } | null = null;
+    for (const query of buildNaverLocalQueries(item)) {
+        const params = new URLSearchParams({
+            query,
+            sm: "hty",
+            style: "v5",
+            searchCoord: getNaverSearchCoord(item, naverItem),
+        });
+        const response = await fetch(`${NAVER_MOBILE_SEARCH_ENDPOINT}?${params.toString()}`, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+                "Referer": "https://m.map.naver.com/",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        });
+        if (!response.ok) continue;
+
+        const html = await response.text();
+        const match = parseNaverMobileSearchItems(html)
+            .map((place) => ({ place, score: naverPlaceSearchScore(item, place) }))
+            .sort((a, b) => b.score - a.score)[0] || null;
+
+        if (!match) continue;
+        if (!bestMatch || match.score > bestMatch.score) bestMatch = match;
+        if (match.score >= 10) break;
+    }
+
+    if (!bestMatch?.place.id || (bestMatch?.score || 0) < 7) return null;
+    return bestMatch.place;
+}
+
+async function fetchNaverPlaceInfo(item: NewMarketResearchItem, naverItem: NaverLocalItem | null): Promise<NaverPlaceInfo> {
+    const place = await searchNaverPlace(item, naverItem);
+    const placeId = place?.id ? String(place.id) : null;
+    const placeUrl = placeId ? `${NAVER_MAP_PLACE_URL_PREFIX}/${placeId}` : null;
+    const localLink = cleanUrl(naverItem?.link);
+
+    if (!placeId) {
+        return {
+            placeId: null,
+            placeUrl: null,
+            telephone: null,
+            links: dedupeNaverPlaceLinks(localLink ? [{
+                label: "대표 링크",
+                url: localLink,
+                type: classifyNaverPlaceLink(localLink, "대표 링크"),
+                source: "naver_local",
+            }] : []),
+        };
+    }
+
+    const response = await fetch(`${NAVER_MOBILE_PLACE_ENDPOINT}/${placeId}/home`, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+            "Referer": "https://m.place.naver.com/",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    });
+    const html = response.ok ? await response.text() : "";
+
+    return {
+        placeId,
+        placeUrl,
+        telephone: stripHtml(place?.tel) || null,
+        links: extractNaverPlaceLinks(html, localLink),
+    };
+}
+
 function buildNaverLocalQueries(item: NewMarketResearchItem): string[] {
     const addressParts = String(item.address || "").split(/\s+/).filter(Boolean);
     const shortAddress = addressParts.slice(0, 3).join(" ");
@@ -570,16 +855,25 @@ async function searchNaverLocal(
     return bestMatch?.naverItem || null;
 }
 
-function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem | null): NewMarketResearchItem {
+function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem | null, placeInfo: NaverPlaceInfo | null = null): NewMarketResearchItem {
     const rawData = getRawData(item);
     const category = stripHtml(naverItem?.category);
     const naverCategoryMatched = isNaverObgynCategory(category);
     const nameKeywordMatched = !!rawData.nameKeywordMatched || hasDetailCandidateNameKeyword(item.name);
     const detailedResearchEligible = !!rawData.detailedResearchEligible || naverCategoryMatched || nameKeywordMatched;
     const naverTitle = stripHtml(naverItem?.title);
-    const naverLink = naverItem?.link || null;
-    const naverTelephone = stripHtml(naverItem?.telephone);
-    const sourceUrls = Array.from(new Set([...(item.sourceUrls || []), naverLink].filter(Boolean) as string[]));
+    const naverLink = cleanUrl(naverItem?.link);
+    const naverTelephone = placeInfo?.telephone || stripHtml(naverItem?.telephone);
+    const naverPlaceLinks = dedupeNaverPlaceLinks(placeInfo?.links || (naverLink ? [{
+        label: "대표 링크",
+        url: naverLink,
+        type: classifyNaverPlaceLink(naverLink, "대표 링크"),
+        source: "naver_local" as const,
+    }] : []));
+    const website = getPreferredWebsiteLink(naverPlaceLinks, naverLink);
+    const blog = getPreferredTypedLink(naverPlaceLinks, "blog");
+    const instagram = getPreferredTypedLink(naverPlaceLinks, "instagram");
+    const sourceUrls = Array.from(new Set([...(item.sourceUrls || []), placeInfo?.placeUrl, website, blog, instagram].filter(Boolean) as string[]));
     const sources = Array.from(new Set([...(item.sources || []), "네이버 지역검색"]));
     const deliveryCandidate = rawData.deliveryCandidate
         ? {
@@ -592,13 +886,17 @@ function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem 
 
     return {
         ...item,
-        phone: item.phone || naverTelephone || null,
-        website: item.website || null,
+        phone: naverTelephone || item.phone || null,
+        website: website || item.website || null,
+        blog: blog || item.blog || null,
+        instagram: instagram || item.instagram || null,
         sources,
         sourceUrls,
         rawData: {
             ...rawData,
-            naverPlaceUrl: naverLink,
+            naverPlaceId: placeInfo?.placeId || rawData.naverPlaceId || null,
+            naverPlaceUrl: placeInfo?.placeUrl || rawData.naverPlaceUrl || null,
+            naverPlaceLinks,
             naverLocal: naverItem ? {
                 title: naverTitle,
                 link: naverLink,
@@ -614,6 +912,33 @@ function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem 
             deliveryCandidate,
         },
     };
+}
+
+export async function enrichMarketResearchItemWithNaverInfo(
+    item: NewMarketResearchItem,
+    clientId = process.env.NAVER_CLIENT_ID,
+    clientSecret = process.env.NAVER_CLIENT_SECRET,
+): Promise<{ item: NewMarketResearchItem; errors: Array<{ source: string; message: string }> }> {
+    const errors: Array<{ source: string; message: string }> = [];
+    let naverItem: NaverLocalItem | null = null;
+
+    if (clientId && clientSecret) {
+        try {
+            naverItem = await searchNaverLocal(item, clientId, clientSecret);
+        } catch (error: any) {
+            errors.push({ source: "네이버 지역검색", message: `${item.name}: ${error?.message || "지역검색 조회 실패"}` });
+        }
+    } else {
+        errors.push({ source: "네이버 지역검색", message: "NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET이 없어 공식 지역검색 link 조회는 건너뛰었습니다." });
+    }
+
+    try {
+        const placeInfo = await fetchNaverPlaceInfo(item, naverItem);
+        return { item: mergeNaverLocal(item, naverItem, placeInfo), errors };
+    } catch (error: any) {
+        errors.push({ source: "네이버 플레이스", message: `${item.name}: ${error?.message || "플레이스 상세 조회 실패"}` });
+        return { item: mergeNaverLocal(item, naverItem, null), errors };
+    }
 }
 
 async function enrichWithNaverLocal(items: NewMarketResearchItem[], clientId: string | undefined, clientSecret: string | undefined): Promise<MarketResearchCollectResult> {
@@ -641,7 +966,13 @@ async function enrichWithNaverLocal(items: NewMarketResearchItem[], clientId: st
         try {
             if (index > 0 && delayMs > 0) await sleep(delayMs);
             const naverItem = await searchNaverLocal(item, clientId, clientSecret, maxRetries, retryDelayMs);
-            enriched.push(mergeNaverLocal(item, naverItem));
+            let placeInfo: NaverPlaceInfo | null = null;
+            try {
+                placeInfo = await fetchNaverPlaceInfo(item, naverItem);
+            } catch (error: any) {
+                errors.push({ source: "네이버 플레이스", message: `${item.name}: ${error?.message || "플레이스 상세 조회 실패"}` });
+            }
+            enriched.push(mergeNaverLocal(item, naverItem, placeInfo));
         } catch (error: any) {
             errors.push({ source: "네이버 지역검색", message: `${item.name}: ${error?.message || "카테고리 조회 실패"}` });
             enriched.push(mergeNaverLocal(item, null));
@@ -702,7 +1033,13 @@ async function enrichDeliveryCandidatesWithNaverLocal(items: NewMarketResearchIt
         try {
             if (index > 0 && delayMs > 0) await sleep(delayMs);
             const naverItem = await searchNaverLocal(item, clientId, clientSecret, maxRetries, retryDelayMs);
-            enrichedByKey.set(key, mergeNaverLocal(item, naverItem));
+            let placeInfo: NaverPlaceInfo | null = null;
+            try {
+                placeInfo = await fetchNaverPlaceInfo(item, naverItem);
+            } catch (error: any) {
+                errors.push({ source: "네이버 플레이스", message: `${item.name}: ${error?.message || "플레이스 상세 조회 실패"}` });
+            }
+            enrichedByKey.set(key, mergeNaverLocal(item, naverItem, placeInfo));
         } catch (error: any) {
             errors.push({ source: "네이버 지역검색", message: `${item.name}: ${error?.message || "카테고리 조회 실패"}` });
             enrichedByKey.set(key, mergeNaverLocal(item, null));

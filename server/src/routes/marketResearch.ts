@@ -70,6 +70,31 @@ function stringify(value: unknown): string | null {
     return String(value);
 }
 
+function mergeManualCorrections(existing: any, candidate: any) {
+    if (existing.verificationStatus !== "manually_corrected") return candidate;
+
+    const existingRawData = existing.rawData && typeof existing.rawData === "object" ? existing.rawData : {};
+    const candidateRawData = candidate.rawData && typeof candidate.rawData === "object" ? candidate.rawData : {};
+    const manualRawData = Object.fromEntries(
+        Object.entries(existingRawData).filter(([key]) => key.startsWith("manual")),
+    );
+
+    return {
+        ...candidate,
+        phone: existing.phone || candidate.phone,
+        email: existing.email || candidate.email,
+        website: existing.website || candidate.website,
+        instagram: existing.instagram || candidate.instagram,
+        blog: existing.blog || candidate.blog,
+        memo: existing.memo || candidate.memo,
+        verificationStatus: existing.verificationStatus,
+        rawData: {
+            ...candidateRawData,
+            ...manualRawData,
+        },
+    };
+}
+
 function normalizeName(value: string): string {
     return value.replace(/\s+/g, "").toLowerCase();
 }
@@ -338,14 +363,15 @@ router.post("/runs", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), asy
                 });
                 inserted++;
             } else {
+                const nextCandidate = mergeManualCorrections(existing, candidate);
                 const changes = TRACKED_FIELDS
-                    .filter((field) => stringify((existing as any)[field]) !== stringify((candidate as any)[field]))
+                    .filter((field) => stringify((existing as any)[field]) !== stringify((nextCandidate as any)[field]))
                     .map((field) => ({
                         itemId: existing.id,
                         runId: run.id,
                         fieldName: field,
                         previousValue: stringify((existing as any)[field]),
-                        newValue: stringify((candidate as any)[field]),
+                        newValue: stringify((nextCandidate as any)[field]),
                     }));
 
                 if (changes.length > 0) {
@@ -354,10 +380,10 @@ router.post("/runs", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), asy
                 }
 
                 await db.update(marketResearchItems).set({
-                    ...candidate,
+                    ...nextCandidate,
                     runId: run.id,
                     stableKey,
-                    normalizedName: normalizeName(candidate.name),
+                    normalizedName: normalizeName(nextCandidate.name),
                     isNew: false,
                     hasUpdates: changes.length > 0,
                     isSelected: selected,
@@ -623,7 +649,7 @@ router.get("/export", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), as
             인큐베이터수: getDeliveryCandidate(item).incubatorCount ?? "",
             분만감시기수: getDeliveryCandidate(item).deliveryMonitorCount ?? "",
             네이버카테고리: item.rawData?.naverLocal?.category || "",
-            네이버플레이스URL: item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || item.rawData?.naverLocal?.link || "",
+            네이버플레이스URL: item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || "",
             상세조사후보: item.rawData?.detailedResearchEligible ? "Y" : "N",
             현황: [item.isSelected ? "영업선택" : "", item.isNew ? "신규업체" : "", item.hasUpdates ? "업데이트" : ""].filter(Boolean).join(", ") || "-",
             분류: item.businessType,
@@ -633,7 +659,8 @@ router.get("/export", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), as
             전화: item.phone || "",
             이메일: item.email || "",
             홈페이지: item.website || "",
-            SNS: item.instagram || "",
+            블로그: item.blog || "",
+            인스타그램: item.instagram || "",
             진료과: (item.medicalDepartments || []).join(", "),
             의료진수: item.totalDoctorCount || "",
             분만여부: isDeliveryCandidateItem(item) ? "Y" : "N",
@@ -645,6 +672,7 @@ router.get("/export", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), as
             출처: (item.sources || []).join(", "),
             신뢰도: item.sourceConfidence,
             검증상태: item.verificationStatus,
+            메모: item.memo || "",
             최종조사일: item.lastResearchedAt,
         }));
         XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(itemRows), "시장조사");

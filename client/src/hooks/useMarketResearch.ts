@@ -25,6 +25,7 @@ export interface MarketResearchItem {
   email?: string | null;
   website?: string | null;
   instagram?: string | null;
+  blog?: string | null;
   isNew: boolean;
   hasUpdates: boolean;
   isSelected: boolean;
