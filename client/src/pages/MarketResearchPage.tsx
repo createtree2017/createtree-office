@@ -101,7 +101,11 @@ function getDoctorCount(item: MarketResearchItem, department: string) {
 }
 
 function getNaverPlaceUrl(item: MarketResearchItem) {
-    return item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || null;
+    const manualUrl = String(item.rawData?.manualNaverPlaceUrl || '');
+    const autoUrl = String(item.rawData?.naverPlaceUrl || '');
+    if (manualUrl.includes('map.naver.com/p/entry/place/')) return manualUrl;
+    if (autoUrl.includes('map.naver.com/p/entry/place/')) return autoUrl;
+    return null;
 }
 
 function researchStageLabel(stage?: string) {

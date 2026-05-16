@@ -357,6 +357,10 @@ function cleanUrl(value: string | null | undefined): string | null {
     }
 }
 
+function isNaverMapPlaceUrl(value: string | null | undefined): boolean {
+    return String(value || "").includes("map.naver.com/p/entry/place/");
+}
+
 function classifyNaverPlaceLink(url: string, label: string): NaverPlaceLink["type"] {
     const normalizedUrl = url.toLowerCase();
     const normalizedLabel = normalizeText(label);
@@ -895,7 +899,7 @@ function mergeNaverLocal(item: NewMarketResearchItem, naverItem: NaverLocalItem 
         rawData: {
             ...rawData,
             naverPlaceId: placeInfo?.placeId || rawData.naverPlaceId || null,
-            naverPlaceUrl: placeInfo?.placeUrl || rawData.naverPlaceUrl || null,
+            naverPlaceUrl: placeInfo?.placeUrl || (isNaverMapPlaceUrl(rawData.naverPlaceUrl) ? rawData.naverPlaceUrl : null),
             naverPlaceLinks,
             naverLocal: naverItem ? {
                 title: naverTitle,

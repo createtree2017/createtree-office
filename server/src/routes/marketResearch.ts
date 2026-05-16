@@ -70,6 +70,14 @@ function stringify(value: unknown): string | null {
     return String(value);
 }
 
+function getNaverPlaceUrl(rawData: any): string {
+    const manualUrl = String(rawData?.manualNaverPlaceUrl || "");
+    const autoUrl = String(rawData?.naverPlaceUrl || "");
+    if (manualUrl.includes("map.naver.com/p/entry/place/")) return manualUrl;
+    if (autoUrl.includes("map.naver.com/p/entry/place/")) return autoUrl;
+    return "";
+}
+
 function mergeManualCorrections(existing: any, candidate: any) {
     if (existing.verificationStatus !== "manually_corrected") return candidate;
 
@@ -649,7 +657,7 @@ router.get("/export", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), as
             인큐베이터수: getDeliveryCandidate(item).incubatorCount ?? "",
             분만감시기수: getDeliveryCandidate(item).deliveryMonitorCount ?? "",
             네이버카테고리: item.rawData?.naverLocal?.category || "",
-            네이버플레이스URL: item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || "",
+            네이버플레이스URL: getNaverPlaceUrl(item.rawData),
             상세조사후보: item.rawData?.detailedResearchEligible ? "Y" : "N",
             현황: [item.isSelected ? "영업선택" : "", item.isNew ? "신규업체" : "", item.hasUpdates ? "업데이트" : ""].filter(Boolean).join(", ") || "-",
             분류: item.businessType,

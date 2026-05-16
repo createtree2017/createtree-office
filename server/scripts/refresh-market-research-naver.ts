@@ -20,6 +20,14 @@ function isDeliveryCandidate(item: any): boolean {
     return item.businessType === "delivery_hospital";
 }
 
+function getNaverPlaceUrl(rawData: any): string | null {
+    const manualUrl = String(rawData?.manualNaverPlaceUrl || "");
+    const autoUrl = String(rawData?.naverPlaceUrl || "");
+    if (manualUrl.includes("map.naver.com/p/entry/place/")) return manualUrl;
+    if (autoUrl.includes("map.naver.com/p/entry/place/")) return autoUrl;
+    return null;
+}
+
 function mergeManualCorrections(existing: any, enriched: any) {
     if (existing.verificationStatus !== "manually_corrected") return enriched;
     const manualRawData = Object.fromEntries(
@@ -83,7 +91,7 @@ async function main() {
             website: next.website || null,
             blog: next.blog || null,
             instagram: next.instagram || null,
-            naverPlaceUrl: next.rawData?.manualNaverPlaceUrl || next.rawData?.naverPlaceUrl || null,
+            naverPlaceUrl: getNaverPlaceUrl(next.rawData),
             linkCount: next.rawData?.naverPlaceLinks?.length || 0,
         }));
     }
