@@ -34,6 +34,19 @@ const OPERATION_STATUSES = [
     { value: 'unknown', label: '확인필요' },
 ];
 
+const BUILDING_SCALES = [
+    { value: 'all', label: '전체' },
+    { value: 'clinic', label: '의원' },
+    { value: 'hospital', label: '병원' },
+    { value: 'general_hospital', label: '종합병원' },
+    { value: 'tertiary_hospital', label: '상급종합' },
+    { value: 'care_hospital', label: '요양병원' },
+    { value: 'korean_hospital', label: '한방병원' },
+    { value: 'public_health', label: '보건기관' },
+    { value: 'other', label: '기타' },
+    { value: 'unknown', label: '미입력' },
+];
+
 const FLAGS = [
     { value: 'all', label: '전체' },
     { value: 'selected', label: '영업선택' },
@@ -101,7 +114,11 @@ function getDoctorCount(item: MarketResearchItem, department: string) {
 }
 
 function getNaverPlaceUrl(item: MarketResearchItem) {
-    return item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || null;
+    const manualUrl = String(item.rawData?.manualNaverPlaceUrl || '');
+    const autoUrl = String(item.rawData?.naverPlaceUrl || '');
+    if (manualUrl.includes('map.naver.com/p/entry/place/')) return manualUrl;
+    if (autoUrl.includes('map.naver.com/p/entry/place/')) return autoUrl;
+    return null;
 }
 
 function researchStageLabel(stage?: string) {
@@ -138,7 +155,7 @@ function FilterButton({ active, label, onClick }: { active: boolean; label: stri
 
 const MarketResearchPage = () => {
     const navigate = useNavigate();
-    const [filters, setFilters] = useState({ q: '', businessType: 'all', region: '전국', operationStatus: 'all', flag: 'all' });
+    const [filters, setFilters] = useState({ q: '', businessType: 'all', region: '전국', operationStatus: 'all', buildingScale: 'all', flag: 'all' });
     const [primaryFilter, setPrimaryFilter] = useState('delivery_obgyn');
     const [page, setPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -342,6 +359,9 @@ const MarketResearchPage = () => {
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {OPERATION_STATUSES.map(item => <FilterButton key={item.value} active={filters.operationStatus === item.value} label={item.label} onClick={() => setFilters(prev => ({ ...prev, operationStatus: item.value }))} />)}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {BUILDING_SCALES.map(item => <FilterButton key={item.value} active={filters.buildingScale === item.value} label={item.label} onClick={() => setFilters(prev => ({ ...prev, buildingScale: item.value }))} />)}
                     </div>
                     <div className="flex flex-col md:flex-row gap-3 md:items-center">
                         <div className="flex flex-wrap gap-2">

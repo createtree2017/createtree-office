@@ -6,6 +6,7 @@ export interface MarketResearchFilters {
   businessType?: string;
   region?: string;
   operationStatus?: string;
+  buildingScale?: string;
   flag?: string;
   view?: string;
   page?: number;

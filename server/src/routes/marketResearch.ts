@@ -70,6 +70,14 @@ function stringify(value: unknown): string | null {
     return String(value);
 }
 
+function getNaverPlaceUrl(rawData: any): string {
+    const manualUrl = String(rawData?.manualNaverPlaceUrl || "");
+    const autoUrl = String(rawData?.naverPlaceUrl || "");
+    if (manualUrl.includes("map.naver.com/p/entry/place/")) return manualUrl;
+    if (autoUrl.includes("map.naver.com/p/entry/place/")) return autoUrl;
+    return "";
+}
+
 function mergeManualCorrections(existing: any, candidate: any) {
     if (existing.verificationStatus !== "manually_corrected") return candidate;
 
@@ -103,6 +111,7 @@ function passesFilters(item: any, query: any): boolean {
     const businessTypes = toArray(query.businessType || query.businessTypes);
     const regions = toArray(query.region || query.regions);
     const operationStatuses = toArray(query.operationStatus || query.operationStatuses);
+    const buildingScales = toArray(query.buildingScale || query.buildingScales);
     const flags = toArray(query.flag || query.flags);
     const q = String(query.q || "").trim().toLowerCase();
 
@@ -118,12 +127,38 @@ function passesFilters(item: any, query: any): boolean {
     }
     if (regions.length > 0 && !regions.includes("전국") && !regions.includes(item.region) && !regions.includes(item.city)) return false;
     if (operationStatuses.length > 0 && !operationStatuses.includes(item.operationStatus)) return false;
+    if (buildingScales.length > 0 && !buildingScales.some((scale) => buildingScaleMatches(item.buildingScale, scale))) return false;
     if (flags.includes("selected") && !item.isSelected) return false;
     if (flags.includes("new") && !item.isNew) return false;
     if (flags.includes("updated") && !item.hasUpdates) return false;
     if (flags.includes("unselected") && item.isSelected) return false;
     if (q && ![item.name, item.address, item.phone, item.email].some((v: any) => String(v || "").toLowerCase().includes(q))) return false;
     return true;
+}
+
+function buildingScaleMatches(value: string | null | undefined, filter: string): boolean {
+    if (!filter || filter === "all") return true;
+    const scale = String(value || "").trim();
+    if (filter === "unknown") return scale === "";
+
+    const groups: Record<string, string[]> = {
+        clinic: ["의원"],
+        hospital: ["병원"],
+        general_hospital: ["종합병원"],
+        tertiary_hospital: ["상급종합"],
+        care_hospital: ["요양병원"],
+        korean_hospital: ["한방병원"],
+        public_health: ["보건소", "보건지소", "보건의료원"],
+    };
+    const matchedValues = groups[filter];
+    if (matchedValues) return matchedValues.includes(scale);
+
+    if (filter === "other") {
+        const groupedValues = Object.values(groups).flat();
+        return scale !== "" && !groupedValues.includes(scale);
+    }
+
+    return scale === filter;
 }
 
 function getDeliveryCandidate(item: any) {
@@ -649,7 +684,7 @@ router.get("/export", authenticateToken, authorizeRole(["ADMIN", "MANAGER"]), as
             인큐베이터수: getDeliveryCandidate(item).incubatorCount ?? "",
             분만감시기수: getDeliveryCandidate(item).deliveryMonitorCount ?? "",
             네이버카테고리: item.rawData?.naverLocal?.category || "",
-            네이버플레이스URL: item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || "",
+            네이버플레이스URL: getNaverPlaceUrl(item.rawData),
             상세조사후보: item.rawData?.detailedResearchEligible ? "Y" : "N",
             현황: [item.isSelected ? "영업선택" : "", item.isNew ? "신규업체" : "", item.hasUpdates ? "업데이트" : ""].filter(Boolean).join(", ") || "-",
             분류: item.businessType,
