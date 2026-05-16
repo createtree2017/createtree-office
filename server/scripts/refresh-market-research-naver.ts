@@ -17,7 +17,7 @@ function sleep(ms: number) {
 }
 
 function isDeliveryCandidate(item: any): boolean {
-    return !!item.isDeliveryHospital || (item.rawData?.deliveryCandidate?.score || 0) >= 3;
+    return item.businessType === "delivery_hospital";
 }
 
 function mergeManualCorrections(existing: any, enriched: any) {
