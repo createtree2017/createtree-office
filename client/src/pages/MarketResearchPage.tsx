@@ -101,7 +101,7 @@ function getDoctorCount(item: MarketResearchItem, department: string) {
 }
 
 function getNaverPlaceUrl(item: MarketResearchItem) {
-    return item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || item.rawData?.naverLocal?.link || null;
+    return item.rawData?.manualNaverPlaceUrl || item.rawData?.naverPlaceUrl || null;
 }
 
 function researchStageLabel(stage?: string) {
@@ -434,6 +434,8 @@ const MarketResearchPage = () => {
                                             <div>{item.phone || '-'}</div>
                                             <div>{item.email || '-'}</div>
                                             {item.website && <a href={item.website} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">홈페이지</a>}
+                                            {item.blog && <a href={item.blog} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 hover:underline">블로그</a>}
+                                            {item.instagram && <a href={item.instagram} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 hover:underline">인스타그램</a>}
                                             <div>
                                                 {getNaverPlaceUrl(item)
                                                     ? <a href={getNaverPlaceUrl(item)!} target="_blank" rel="noreferrer" className="text-green-700 hover:underline dark:text-green-300">네이버플레이스</a>
@@ -605,6 +607,7 @@ const MarketResearchPage = () => {
                                 ['email', '이메일'],
                                 ['website', '홈페이지'],
                                 ['instagram', '인스타그램'],
+                                ['blog', '블로그'],
                                 ['address', '주소'],
                                 ['deliveryCount', '최근 분만수'],
                                 ['totalDoctorCount', '전체 의료진 수'],
