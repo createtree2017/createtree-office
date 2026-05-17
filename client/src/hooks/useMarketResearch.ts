@@ -187,6 +187,7 @@ export function useUpdateMarketResearchItem() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['market-research-items'] });
       queryClient.invalidateQueries({ queryKey: ['market-research-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-leads'] });
     },
   });
 }
