@@ -6,7 +6,16 @@ import { authenticateToken, authorizeRole, AuthRequest } from "../middleware/aut
 
 const router = Router();
 
+function toArray(value: unknown): string[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    return String(value).split(",").map(v => v.trim()).filter(Boolean);
+}
+
 async function buildLeadRows(query: any) {
+    const statuses = toArray(query.status || query.statuses);
+    const businessTypes = toArray(query.businessType || query.businessTypes);
+    const regions = toArray(query.region || query.regions);
     const leads = await db.select().from(salesLeads).where(eq(salesLeads.isArchived, false)).orderBy(desc(salesLeads.updatedAt));
     const items = await db.select().from(marketResearchItems);
     const itemMap = new Map(items.map((item) => [item.id, item]));
@@ -14,9 +23,9 @@ async function buildLeadRows(query: any) {
         .map((lead) => ({ ...lead, item: itemMap.get(lead.marketResearchItemId) || null }))
         .filter((lead: any) => {
             if (!lead.item) return false;
-            if (query.status && lead.status !== query.status) return false;
-            if (query.businessType && lead.item.businessType !== query.businessType) return false;
-            if (query.region && query.region !== "전국" && lead.item.region !== query.region && lead.item.city !== query.region) return false;
+            if (statuses.length > 0 && !statuses.includes("all") && !statuses.includes(lead.status)) return false;
+            if (businessTypes.length > 0 && !businessTypes.includes("all") && !businessTypes.includes(lead.item.businessType)) return false;
+            if (regions.length > 0 && !regions.includes("all") && !regions.includes("전국") && !regions.includes(lead.item.region) && !regions.includes(lead.item.city)) return false;
             const q = String(query.q || "").trim().toLowerCase();
             if (q && ![lead.item.name, lead.item.address, lead.item.phone, lead.item.email, lead.notes].some((v: any) => String(v || "").toLowerCase().includes(q))) return false;
             return true;

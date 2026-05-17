@@ -217,6 +217,7 @@ export type SalesStatus =
     | 'closed'
     | 'on_hold'
     | 'rejected'
+    | 'blacklisted'
     | 'unsubscribed';
 
 export type SalesActivityType = 'email' | 'call' | 'sns' | 'visit' | 'meeting' | 'feedback' | 'memo';

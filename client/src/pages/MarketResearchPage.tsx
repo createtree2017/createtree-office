@@ -155,8 +155,15 @@ function FilterButton({ active, label, onClick }: { active: boolean; label: stri
 
 const MarketResearchPage = () => {
     const navigate = useNavigate();
-    const [filters, setFilters] = useState({ q: '', businessType: 'all', region: '전국', operationStatus: 'all', buildingScale: 'all', flag: 'all' });
-    const [primaryFilter, setPrimaryFilter] = useState('delivery_obgyn');
+    const [filters, setFilters] = useState({
+        q: '',
+        businessType: ['all'],
+        region: ['전국'],
+        operationStatus: ['all'],
+        buildingScale: ['all'],
+        flag: ['all'],
+    });
+    const [primaryFilters, setPrimaryFilters] = useState(['delivery_obgyn']);
     const [page, setPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [editingItem, setEditingItem] = useState<MarketResearchItem | null>(null);
@@ -171,13 +178,8 @@ const MarketResearchPage = () => {
     const runProcessed = Number(runStats.processed || 0);
     const runTotal = Number(runStats.total || 0);
     const runProgressPercent = runTotal > 0 ? Math.min(100, Math.round((runProcessed / runTotal) * 100)) : 0;
-    const activePrimaryFilter = PRIMARY_FILTERS.find(item => item.value === primaryFilter) || PRIMARY_FILTERS[0];
-    const effectiveFilters = useMemo(() => ({
-        ...filters,
-        businessType: activePrimaryFilter.businessType,
-    }), [filters, activePrimaryFilter.businessType]);
-    const listFilters = useMemo(() => ({ ...effectiveFilters, view: activePrimaryFilter.view, page, pageSize: PAGE_SIZE }), [effectiveFilters, activePrimaryFilter.view, page]);
-    const exportFilters = useMemo(() => ({ ...effectiveFilters, view: activePrimaryFilter.view }), [effectiveFilters, activePrimaryFilter.view]);
+    const listFilters = useMemo(() => ({ ...filters, primaryFilter: primaryFilters, view: 'all', page, pageSize: PAGE_SIZE }), [filters, primaryFilters, page]);
+    const exportFilters = useMemo(() => ({ ...filters, primaryFilter: primaryFilters, view: 'all' }), [filters, primaryFilters]);
     const { data: itemsResult, isLoading, refetch: refetchItems } = useMarketResearchItems(listFilters, researchInProgress);
     const { data: summaryData } = useMarketResearchSummary(listFilters, researchInProgress);
     const items = useMemo(() => itemsResult?.items ?? [], [itemsResult?.items]);
@@ -187,6 +189,22 @@ const MarketResearchPage = () => {
     const selectItem = useSelectMarketResearchItem();
     const unselectItem = useUnselectMarketResearchItem();
     const updateItem = useUpdateMarketResearchItem();
+    const selectedResearchRegions = useMemo(() => filters.region.filter(region => region !== '전국'), [filters.region]);
+    const regionScope = selectedResearchRegions.length > 0 ? selectedResearchRegions.join(', ') : '전국';
+    const selectedOperationStatuses = useMemo(() => filters.operationStatus.filter(status => status !== 'all'), [filters.operationStatus]);
+    const runBusinessTypes = useMemo(() => {
+        if (primaryFilters.includes('all')) return ['obgyn', 'postpartum_center'];
+
+        const values = new Set<string>();
+        if (primaryFilters.some(value => ['delivery_obgyn', 'general_obgyn', 'detail_candidates'].includes(value))) {
+            values.add('obgyn');
+        }
+        if (primaryFilters.includes('postpartum_center')) {
+            values.add('postpartum_center');
+        }
+
+        return values.size > 0 ? Array.from(values) : ['obgyn', 'postpartum_center'];
+    }, [primaryFilters]);
 
     const summary = summaryData || {
         total: 0,
@@ -208,7 +226,7 @@ const MarketResearchPage = () => {
     useEffect(() => {
         setPage(1);
         setSelectedIds([]);
-    }, [filters, primaryFilter]);
+    }, [filters, primaryFilters]);
 
     const toggleSelectedId = (id: number) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
@@ -225,6 +243,32 @@ const MarketResearchPage = () => {
         setSelectedIds(prev => [...new Set([...prev, ...pageItemIds])]);
     };
 
+    const toggleArrayFilter = (key: 'region' | 'operationStatus' | 'buildingScale' | 'flag', value: string, allValue: string) => {
+        setFilters(prev => {
+            if (value === allValue) return { ...prev, [key]: [allValue] };
+
+            const currentValues = prev[key].filter(item => item !== allValue);
+            const nextValues = currentValues.includes(value)
+                ? currentValues.filter(item => item !== value)
+                : [...currentValues, value];
+
+            return { ...prev, [key]: nextValues.length > 0 ? nextValues : [allValue] };
+        });
+    };
+
+    const togglePrimaryFilter = (value: string) => {
+        setPrimaryFilters(prev => {
+            if (value === 'all') return ['all'];
+
+            const currentValues = prev.filter(item => item !== 'all');
+            const nextValues = currentValues.includes(value)
+                ? currentValues.filter(item => item !== value)
+                : [...currentValues, value];
+
+            return nextValues.length > 0 ? nextValues : ['all'];
+        });
+    };
+
     const handleSelectAllFiltered = async () => {
         try {
             const ids = await fetchMarketResearchItemIds(exportFilters);
@@ -239,10 +283,10 @@ const MarketResearchPage = () => {
         try {
             await createRun.mutateAsync({
                 title: `시장조사 ${new Date().toLocaleDateString('ko-KR')}`,
-                regionScope: filters.region,
-                regions: filters.region === '전국' ? [] : [filters.region],
-                businessTypes: effectiveFilters.businessType === 'all' ? ['obgyn', 'postpartum_center'] : [effectiveFilters.businessType],
-                operationStatuses: filters.operationStatus === 'all' ? [] : [filters.operationStatus],
+                regionScope,
+                regions: selectedResearchRegions,
+                businessTypes: runBusinessTypes,
+                operationStatuses: selectedOperationStatuses,
             });
             toast.success('시장조사가 완료되었습니다.');
         } catch (error: any) {
@@ -343,8 +387,8 @@ const MarketResearchPage = () => {
                         {PRIMARY_FILTERS.map(item => (
                             <button
                                 key={item.value}
-                                onClick={() => setPrimaryFilter(item.value)}
-                                className={`text-left rounded-xl border px-4 py-3 transition-all ${primaryFilter === item.value
+                                onClick={() => togglePrimaryFilter(item.value)}
+                                className={`text-left rounded-xl border px-4 py-3 transition-all ${primaryFilters.includes(item.value)
                                     ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-100'
                                     : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
                                     }`}
@@ -355,17 +399,17 @@ const MarketResearchPage = () => {
                         ))}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {REGIONS.map(region => <FilterButton key={region} active={filters.region === region} label={region} onClick={() => setFilters(prev => ({ ...prev, region }))} />)}
+                        {REGIONS.map(region => <FilterButton key={region} active={filters.region.includes(region)} label={region} onClick={() => toggleArrayFilter('region', region, '전국')} />)}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {OPERATION_STATUSES.map(item => <FilterButton key={item.value} active={filters.operationStatus === item.value} label={item.label} onClick={() => setFilters(prev => ({ ...prev, operationStatus: item.value }))} />)}
+                        {OPERATION_STATUSES.map(item => <FilterButton key={item.value} active={filters.operationStatus.includes(item.value)} label={item.label} onClick={() => toggleArrayFilter('operationStatus', item.value, 'all')} />)}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {BUILDING_SCALES.map(item => <FilterButton key={item.value} active={filters.buildingScale === item.value} label={item.label} onClick={() => setFilters(prev => ({ ...prev, buildingScale: item.value }))} />)}
+                        {BUILDING_SCALES.map(item => <FilterButton key={item.value} active={filters.buildingScale.includes(item.value)} label={item.label} onClick={() => toggleArrayFilter('buildingScale', item.value, 'all')} />)}
                     </div>
                     <div className="flex flex-col md:flex-row gap-3 md:items-center">
                         <div className="flex flex-wrap gap-2">
-                            {FLAGS.map(item => <FilterButton key={item.value} active={filters.flag === item.value} label={item.label} onClick={() => setFilters(prev => ({ ...prev, flag: item.value }))} />)}
+                            {FLAGS.map(item => <FilterButton key={item.value} active={filters.flag.includes(item.value)} label={item.label} onClick={() => toggleArrayFilter('flag', item.value, 'all')} />)}
                         </div>
                         <div className="relative md:ml-auto">
                             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

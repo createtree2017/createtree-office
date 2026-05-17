@@ -28,15 +28,16 @@ export interface SalesActivity {
 
 export interface SalesLeadFilters {
   q?: string;
-  status?: string;
-  businessType?: string;
-  region?: string;
+  status?: string | string[];
+  businessType?: string | string[];
+  region?: string | string[];
 }
 
 function toQuery(filters: SalesLeadFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    if (value && value !== 'all') params.set(key, value);
+    const queryValue = Array.isArray(value) ? value.filter(Boolean).join(',') : value;
+    if (queryValue && queryValue !== 'all') params.set(key, String(queryValue));
   });
   const query = params.toString();
   return query ? `?${query}` : '';
