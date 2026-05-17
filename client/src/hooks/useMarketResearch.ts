@@ -3,11 +3,12 @@ import { apiFetch, getAuthHeaders, type ApiResponse } from '../lib/api';
 
 export interface MarketResearchFilters {
   q?: string;
-  businessType?: string;
-  region?: string;
-  operationStatus?: string;
-  buildingScale?: string;
-  flag?: string;
+  businessType?: string | string[];
+  primaryFilter?: string | string[];
+  region?: string | string[];
+  operationStatus?: string | string[];
+  buildingScale?: string | string[];
+  flag?: string | string[];
   view?: string;
   page?: number;
   pageSize?: number;
@@ -98,8 +99,9 @@ type PaginatedApiResponse<T> = ApiResponse<T> & {
 function toQuery(filters: MarketResearchFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '' && (value !== 'all' || key === 'view')) {
-      params.set(key, String(value));
+    const queryValue = Array.isArray(value) ? value.filter(Boolean).join(',') : value;
+    if (queryValue !== undefined && queryValue !== null && queryValue !== '' && (queryValue !== 'all' || key === 'view')) {
+      params.set(key, String(queryValue));
     }
   });
   const query = params.toString();

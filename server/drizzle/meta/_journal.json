@@ -36,6 +36,13 @@
       "when": 1778733985849,
       "tag": "0004_careless_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779027635783,
+      "tag": "0005_awesome_shaman",
+      "breakpoints": true
     }
   ]
 }

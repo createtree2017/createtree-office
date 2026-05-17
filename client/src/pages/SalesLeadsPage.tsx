@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { CheckSquare, Edit3, Mail, MessageSquare, Phone, Plus, Search, Send, Users, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SalesLead, useCreateSalesActivity, useSalesLeads, useUpdateSalesLead } from '../hooks/useSalesLeads';
@@ -14,12 +14,13 @@ const SALES_STATUSES = [
     { value: 'meeting_scheduled', label: '미팅예정' },
     { value: 'pilot_proposed', label: '파일럿제안' },
     { value: 'quotation_proposed', label: '견적제안' },
-    { value: 'contracting', label: '계약진행' },
-    { value: 'operating', label: '운영중' },
+    { value: 'contracting', label: '계약진행', separatorAfter: true },
     { value: 'closed', label: '폐업' },
     { value: 'on_hold', label: '보류' },
     { value: 'rejected', label: '거절' },
-    { value: 'unsubscribed', label: '수신거부' },
+    { value: 'unsubscribed', label: '수신거부', separatorAfter: true },
+    { value: 'operating', label: '운영중' },
+    { value: 'blacklisted', label: '블랙리스트' },
 ];
 
 const ACTIVITY_TYPES = [
@@ -66,8 +67,24 @@ function getNaverPlaceUrl(item?: MarketResearchItem | null) {
     return null;
 }
 
+function getStatusFilterClass(value: string, active: boolean) {
+    if (value === 'operating') {
+        return active
+            ? 'bg-emerald-600 text-white border-emerald-600'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-200 dark:border-emerald-700';
+    }
+    if (value === 'blacklisted') {
+        return active
+            ? 'bg-rose-600 text-white border-rose-600'
+            : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-900/25 dark:text-rose-200 dark:border-rose-700';
+    }
+    return active
+        ? 'bg-emerald-600 text-white border-emerald-600'
+        : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+}
+
 const SalesLeadsPage = () => {
-    const [filters, setFilters] = useState({ q: '', status: 'all', businessType: 'all', region: 'all' });
+    const [filters, setFilters] = useState({ q: '', status: ['all'], businessType: 'all', region: 'all' });
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [activityLead, setActivityLead] = useState<SalesLead | null>(null);
     const [activityForm, setActivityForm] = useState({ activityType: 'call', subject: '', content: '', outcome: '', nextAction: '' });
@@ -105,6 +122,19 @@ const SalesLeadsPage = () => {
 
     const toggleDisplayedSelection = () => {
         setSelectedIds(allDisplayedSelected ? [] : displayedLeadIds);
+    };
+
+    const toggleStatusFilter = (status: string) => {
+        setFilters(prev => {
+            if (status === 'all') return { ...prev, status: ['all'] };
+
+            const currentStatuses = prev.status.filter(value => value !== 'all');
+            const nextStatuses = currentStatuses.includes(status)
+                ? currentStatuses.filter(value => value !== status)
+                : [...currentStatuses, status];
+
+            return { ...prev, status: nextStatuses.length > 0 ? nextStatuses : ['all'] };
+        });
     };
 
     const handleStatusChange = async (lead: SalesLead, status: string) => {
@@ -244,13 +274,17 @@ const SalesLeadsPage = () => {
                 <div className="bento-card p-4 flex flex-col gap-3">
                     <div className="flex flex-wrap gap-2">
                         {SALES_STATUSES.map(status => (
-                            <button
-                                key={status.value}
-                                onClick={() => setFilters(prev => ({ ...prev, status: status.value }))}
-                                className={`px-3 py-1.5 rounded-lg border text-xs font-bold ${filters.status === status.value ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
-                            >
-                                {status.label}
-                            </button>
+                            <Fragment key={status.value}>
+                                <button
+                                    onClick={() => toggleStatusFilter(status.value)}
+                                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold ${getStatusFilterClass(status.value, filters.status.includes(status.value))}`}
+                                >
+                                    {status.label}
+                                </button>
+                                {status.separatorAfter && (
+                                    <span className="self-center px-1 text-slate-300 dark:text-slate-600" aria-hidden="true">ㅣ</span>
+                                )}
+                            </Fragment>
                         ))}
                     </div>
                     <div className="relative">

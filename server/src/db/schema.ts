@@ -219,6 +219,7 @@ export const salesStatusEnum = pgEnum("sales_status", [
     "closed",
     "on_hold",
     "rejected",
+    "blacklisted",
     "unsubscribed",
 ]);
 

@@ -128,10 +128,13 @@ function passesFilters(item: any, query: any): boolean {
     if (regions.length > 0 && !regions.includes("전국") && !regions.includes(item.region) && !regions.includes(item.city)) return false;
     if (operationStatuses.length > 0 && !operationStatuses.includes(item.operationStatus)) return false;
     if (buildingScales.length > 0 && !buildingScales.some((scale) => buildingScaleMatches(item.buildingScale, scale))) return false;
-    if (flags.includes("selected") && !item.isSelected) return false;
-    if (flags.includes("new") && !item.isNew) return false;
-    if (flags.includes("updated") && !item.hasUpdates) return false;
-    if (flags.includes("unselected") && item.isSelected) return false;
+    if (flags.length > 0 && !flags.some((flag) => {
+        if (flag === "selected") return item.isSelected;
+        if (flag === "new") return item.isNew;
+        if (flag === "updated") return item.hasUpdates;
+        if (flag === "unselected") return !item.isSelected;
+        return false;
+    })) return false;
     if (q && ![item.name, item.address, item.phone, item.email].some((v: any) => String(v || "").toLowerCase().includes(q))) return false;
     return true;
 }
@@ -188,6 +191,19 @@ function passesView(item: any, query: any): boolean {
     return isObgynCandidate(item);
 }
 
+function passesPrimaryFilters(item: any, query: any): boolean {
+    const primaryFilters = toArray(query.primaryFilter || query.primaryFilters);
+    if (primaryFilters.length === 0 || primaryFilters.includes("all")) return true;
+
+    return primaryFilters.some((filter) => {
+        if (filter === "delivery_obgyn") return isDeliveryCandidateItem(item);
+        if (filter === "general_obgyn") return item.businessType === "general_obgyn";
+        if (filter === "postpartum_center") return item.businessType === "postpartum_center";
+        if (filter === "detail_candidates") return item.rawData?.detailedResearchEligible === true;
+        return false;
+    });
+}
+
 function parsePositiveInt(value: unknown, fallback: number, max?: number): number {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -240,6 +256,7 @@ async function listItems(query: any, options: { paginate?: boolean } = { paginat
     const leads = await db.select().from(salesLeads).where(eq(salesLeads.isArchived, false));
     const filtered = applyLeadState(rows, leads)
         .filter((item) => passesView(item, query))
+        .filter((item) => passesPrimaryFilters(item, query))
         .filter((item) => passesFilters(item, query));
 
     if (options.paginate === false) {
@@ -277,6 +294,7 @@ async function getSummary(query: any) {
     const leads = await db.select().from(salesLeads).where(eq(salesLeads.isArchived, false));
     const filtered = applyLeadState(rows, leads)
         .filter((item) => passesView(item, query))
+        .filter((item) => passesPrimaryFilters(item, query))
         .filter((item) => passesFilters(item, query));
 
     return {
