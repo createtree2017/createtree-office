@@ -1,0 +1,34 @@
+name: Restart Railway Office Service
+
+on:
+  schedule:
+    # 08:30 KST = 23:30 UTC
+    - cron: "30 23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: restart-railway-office
+  cancel-in-progress: false
+
+jobs:
+  restart:
+    name: Restart createtree-office
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Restart Railway app service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          npx -y @railway/cli@latest restart \
+            --service createtree-office \
+            --environment production \
+            --yes \
+            --json
+
+      - name: Verify health endpoint
+        run: |
+          sleep 20
+          curl --fail --show-error --silent --max-time 30 \
+            https://createtree-office-production.up.railway.app/api/health
